@@ -601,6 +601,25 @@
                 flex-direction: column;
             }
         }
+        
+        /* Estilos para mensajes de éxito y error */
+        .success-badge {
+            background: #28a745;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        
+        .success-message {
+            color: #155724;
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            border-radius: 6px;
+            padding: 12px;
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>
@@ -632,12 +651,17 @@
                                 <input type="radio" name="extractionType" value="specific">
                                 <span>Solo campos específicos</span>
                             </label>
+                            <label class="radio-label">
+                                <input type="radio" name="extractionType" value="smart">
+                                <span>Extracción Inteligente</span>
+                            </label>
+
                         </div>
                         
                         <div id="specificFields" class="specific-fields" style="display: none;">
                             <textarea 
                                 id="fieldInput" 
-                                placeholder="Escribe los campos que quieres extraer, uno por línea. Ejemplos:&#10;número de orden&#10;cantidad de cajas&#10;nombre del cliente&#10;número de teléfono&#10;dirección&#10;&#10;Nota: Para manifestos de carga, usa estos campos específicos&#10;El sistema detectará automáticamente el tipo de documento"
+                                placeholder="Escribe los campos que quieres extraer, uno por línea. Ejemplos:&#10;número de orden&#10;cantidad de cajas&#10;nombre del cliente&#10;número de teléfono&#10;dirección&#10;id de carga&#10;id del envío&#10;&#10;Nota: Para manifestos de carga, usa estos campos específicos&#10;El sistema detectará automáticamente el tipo de documento&#10;&#10;Con Extracción Inteligente: Usa Gemini AI para extracción precisa"
                                 rows="8"
                                 disabled
                             ></textarea>
@@ -700,7 +724,7 @@
         document.querySelectorAll('input[name="extractionType"]').forEach(radio => {
             radio.addEventListener('change', (e) => {
                 console.log('🎯 Opción de extracción cambiada:', e.target.value);
-                if (e.target.value === 'specific') {
+                if (e.target.value === 'specific' || e.target.value === 'smart') {
                     specificFields.style.display = 'block';
                     fieldInput.disabled = false;
                     fieldInput.focus();
@@ -777,10 +801,14 @@
             if (extractionType === 'specific') {
                 const fields = fieldInput.value.split('\n').filter(field => field.trim() !== '');
                 formData.append('specificFields', JSON.stringify(fields));
+            } else if (extractionType === 'smart') {
+                const fields = fieldInput.value.split('\n').filter(field => field.trim() !== '');
+                formData.append('fields', JSON.stringify(fields));
             }
 
             try {
-                const response = await fetch('/api/extract', {
+                const apiEndpoint = extractionType === 'smart' ? '/api/extract-ai' : '/api/extract';
+                const response = await fetch(apiEndpoint, {
                     method: 'POST',
                     body: formData
                 });
@@ -788,7 +816,23 @@
                 const data = await response.json();
 
                 if (data.success) {
-                    displayResults(data.results);
+                    // Si es extracción inteligente, descargar automáticamente
+                    const extractionType = document.querySelector('input[name="extractionType"]:checked').value;
+                    if (extractionType === 'smart' && data.results && data.results.length > 0) {
+                        const result = data.results[0];
+                        if (result.structuredData && result.structuredData.length > 0) {
+                            // Descargar automáticamente como Excel
+                            exportResults(result.fileName, 'excel', safeBase64Encode(JSON.stringify(result.structuredData)), safeBase64Encode(result.fullText || ''));
+                            
+                            // Mostrar mensaje de éxito
+                            showSuccess(`✅ Extracción exitosa! Se descargaron ${result.structuredData.length} campos. Revisa tu carpeta de descargas.`);
+                        } else {
+                            displayResults(data.results);
+                        }
+                    } else {
+                        displayResults(data.results);
+                    }
+                    
                     if (data.stats) {
                         displayStats(data.stats);
                     }
@@ -919,6 +963,15 @@
                             // Usar los campos específicos definidos por el usuario
                             const userFields = fieldInput.value.split('\n').filter(field => field.trim() !== '');
                             structuredData = extractSpecificFields(text, userFields);
+                        } else if (extractionType === 'smart') {
+                            // Para extracción inteligente, usar los datos que ya vienen estructurados
+                            if (result.structuredData && Array.isArray(result.structuredData)) {
+                                structuredData = result.structuredData;
+                            } else {
+                                // Fallback a extracción manual
+                                const userFields = fieldInput.value.split('\n').filter(field => field.trim() !== '');
+                                structuredData = extractSpecificFields(text, userFields);
+                            }
                         } else {
                             // Detección automática para "todo el contenido"
                             structuredData = detectStructuredData(text);
@@ -1188,104 +1241,195 @@
                 field.includes('order') || 
                 field.includes('no.'))) {
                 
-                // Extraer todos los números de orden que empiecen con 6000 o 7000
-                const orderRegex = /Orden:\s*((?:6|7)0{3}\d{6})/g;
-                const matches = [...text.matchAll(orderRegex)];
+                // Delimitar el texto hasta las firmas para evitar extraer datos de otras secciones
+                const textBeforeSignatures = text.split(/FIRMA ENCARGADO DESPACHO|FIRMA DE CHOFER|ENCARGADO SEGURIDAD/)[0];
+                
+                // Extraer números de orden con diferentes formatos
+                const orderRegex = /(?:Orden|Número de orden):\s*((?:6|7)0{3}\d{6}|CPOV-\d{9}|[A-Z]{2,4}-\d{8,10})/gi;
+                const matches = [...textBeforeSignatures.matchAll(orderRegex)];
+                
+                console.log('🔍 Encontrados', matches.length, 'matches de órdenes (antes de firmas)');
+                console.log('🔍 DEBUG: Texto antes de firmas (primeros 500 caracteres):');
+                console.log(textBeforeSignatures.substring(0, 500));
+                matches.forEach((match, index) => {
+                    console.log(`Orden ${index + 1}: "${match[1]}"`);
+                });
                 
                 if (matches.length > 0) {
                     // Eliminar duplicados usando Set
                     const uniqueOrders = [...new Set(matches.map(m => m[1]))];
+                    console.log('✅ Órdenes únicas encontradas:', uniqueOrders.length);
+                    console.log('📋 Lista completa de órdenes únicas:', uniqueOrders);
                     structuredData.push({
                         field: 'Número de Orden',
                         values: uniqueOrders
                     });
+                } else {
+                    console.log('❌ No se encontraron números de orden');
                 }
             }
             
+            // Si se solicita ID de carga, extraer directamente
+            if (normalizedUserFields.some(field => 
+                field.includes('carga') || 
+                field.includes('load'))) {
+                
+                // Delimitar el texto hasta las firmas para evitar extraer datos de otras secciones
+                const textBeforeSignatures = text.split(/FIRMA ENCARGADO DESPACHO|FIRMA DE CHOFER|ENCARGADO SEGURIDAD/)[0];
+                
+                // Extraer IDs de carga con formato CG-XXXXXXXX
+                const loadRegex = /(?:Id\. de la carga|Id de la carga):\s*(CG-\d{8})/gi;
+                const matches = [...textBeforeSignatures.matchAll(loadRegex)];
+                
+                console.log('🔍 Encontrados', matches.length, 'matches de IDs de carga');
+                console.log('🔍 DEBUG: Buscando patrones de carga en el texto...');
+                console.log('🔍 Patrón de búsqueda: /(?:Id\\. de la carga|Id de la carga):\\s*(CG-\\d{8})/gi');
+                matches.forEach((match, index) => {
+                    console.log(`ID Carga ${index + 1}: "${match[1]}"`);
+                });
+                
+                if (matches.length > 0) {
+                    // Eliminar duplicados usando Set
+                    const uniqueLoads = [...new Set(matches.map(m => m[1]))];
+                    console.log('✅ IDs de carga únicos encontrados:', uniqueLoads.length);
+                    console.log('📋 Lista completa de IDs de carga:', uniqueLoads);
+                    structuredData.push({
+                        field: 'ID de Carga',
+                        values: uniqueLoads
+                    });
+                } else {
+                    console.log('❌ No se encontraron IDs de carga');
+                }
+            }
+            
+            // Si se solicita ID de envío, extraer directamente
+            if (normalizedUserFields.some(field => 
+                field.includes('envío') || 
+                field.includes('envio') ||
+                field.includes('shipment'))) {
+                
+                // Delimitar el texto hasta las firmas para evitar extraer datos de otras secciones
+                const textBeforeSignatures = text.split(/FIRMA ENCARGADO DESPACHO|FIRMA DE CHOFER|ENCARGADO SEGURIDAD/)[0];
+                
+                // Extraer IDs de envío con formato ENV-XXXXXXXX
+                const shipmentRegex = /(?:Id\. del envío|Id del envío):\s*(ENV-\d{8})/gi;
+                const matches = [...textBeforeSignatures.matchAll(shipmentRegex)];
+                
+                console.log('🔍 Encontrados', matches.length, 'matches de IDs de envío');
+                console.log('🔍 DEBUG: Buscando patrones de envío en el texto...');
+                console.log('🔍 Patrón de búsqueda: /(?:Id\\. del envío|Id del envío):\\s*(ENV-\\d{8})/gi');
+                matches.forEach((match, index) => {
+                    console.log(`ID Envío ${index + 1}: "${match[1]}"`);
+                });
+                
+                if (matches.length > 0) {
+                    // Eliminar duplicados usando Set
+                    const uniqueShipments = [...new Set(matches.map(m => m[1]))];
+                    console.log('✅ IDs de envío únicos encontrados:', uniqueShipments.length);
+                    console.log('📋 Lista completa de IDs de envío:', uniqueShipments);
+                    structuredData.push({
+                        field: 'ID de Envío',
+                        values: uniqueShipments
+                    });
+                } else {
+                    console.log('❌ No se encontraron IDs de envío');
+                }
+            }
+            
+            // Si se solicita nombre de cliente, extraer directamente
+            console.log('🔍 Verificando si se solicita nombre/cliente...');
+            console.log('Campos normalizados:', normalizedUserFields);
+            
+            const shouldExtractNames = normalizedUserFields.some(field => 
+                field.includes('nombre') || 
+                field.includes('cliente') || 
+                field.includes('customer') ||
+                field.includes('client') ||
+                field.includes('name') ||
+                field.includes('nombre del cliente'));
+                
+            console.log('¿Debería extraer nombres?', shouldExtractNames);
+            console.log('Campo específico solicitado:', normalizedUserFields[0]);
+            
+            if (shouldExtractNames) {
+                
+                // Delimitar el texto hasta las firmas para evitar extraer datos de otras secciones
+                const textBeforeSignatures = text.split(/FIRMA ENCARGADO DESPACHO|FIRMA DE CHOFER|ENCARGADO SEGURIDAD/)[0];
+                
+                // Extraer todos los nombres de clientes con el formato "Cliente: [nombre]"
+                const clientRegex = /Cliente:\s*([^,]+?)(?=\s*[,]?\s*(?:Dirección|Teléfonos|Cédula)|$)/gi;
+                const matches = [...textBeforeSignatures.matchAll(clientRegex)];
+                
+                console.log('🔍 Encontrados', matches.length, 'matches de clientes (antes de firmas)');
+                matches.forEach((match, index) => {
+                    console.log(`Cliente ${index + 1}: "${match[1].trim()}"`);
+                });
+                
+                if (matches.length > 0) {
+                    // Mantener todos los nombres encontrados, pero eliminar duplicados solo de "First Name Last Name"
+                    const allClients = matches.map(m => m[1].trim());
+                    
+                    // Procesar nombres con identificación única para "First Name Last Name"
+                    const processedClients = [];
+                    const realNames = new Set();
+                    let genericClientCount = 0;
+                    
+                    console.log('🔍 DEBUG: Lista completa de matches encontrados:');
+                    allClients.forEach((name, index) => {
+                        console.log(`  ${index + 1}. "${name}"`);
+                    });
+                    
+                    allClients.forEach(name => {
+                        if (name === 'First Name Last Name') {
+                            // Asignar nombres únicos basados en la posición
+                            genericClientCount++;
+                            const uniqueName = `Cliente Genérico #${genericClientCount}`;
+                            processedClients.push(uniqueName);
+                            console.log(`✅ Agregando "${uniqueName}" (posición #${genericClientCount})`);
+                        } else {
+                            // Solo agregar nombres reales una vez (eliminar duplicados)
+                            if (!realNames.has(name)) {
+                                realNames.add(name);
+                                processedClients.push(name);
+                                console.log(`✅ Agregando nombre real: "${name}"`);
+                            } else {
+                                console.log(`❌ Saltando duplicado: "${name}"`);
+                                            }
+                                        }
+                                    });
+                    
+                    console.log(`📊 Resumen: ${genericClientCount} "Cliente Genérico" identificados + ${realNames.size} nombres únicos = ${processedClients.length} total`);
+                    
+                    console.log('✅ Nombres procesados:', processedClients.length);
+                    console.log('📋 Lista completa de nombres:', processedClients);
+                    structuredData.push({
+                        field: 'Nombre del Cliente',
+                        values: processedClients
+                    });
+                } else {
+                    console.log('❌ No se encontraron nombres de clientes');
+                }
+            }
+            
+            // Solo procesar campos que NO fueron procesados específicamente
+            console.log('🔄 Procesando bucle general de campos...');
             userFields.forEach(field => {
                 const fieldName = field.trim().toLowerCase();
+                console.log('Procesando campo:', fieldName);
+                
+                // Saltar campos que ya fueron procesados específicamente
+                if (fieldName.includes('nombre') || 
+                    fieldName.includes('cliente') || 
+                    fieldName.includes('orden') || 
+                    fieldName.includes('order')) {
+                    console.log('⚠️ Campo ya procesado específicamente, saltando...');
+                    return; // Saltar este campo completamente
+                }
+                
                 let foundValues = [];
                 
                 // Patrones específicos para cada tipo de campo
                 switch (fieldName) {
-                    case 'número de orden':
-                    case 'numero de orden':
-                    case 'order':
-                    case 'orden':
-                        // Buscar números de orden específicos
-                        const orderPatterns = [
-                            /orden[:\s]*(\d{8,12})/gi,
-                            /order[:\s]*(\d{8,12})/gi,
-                            /número[:\s]*(\d{8,12})/gi,
-                            /número de orden[:\s]*(\d{8,12})/gi,
-                            /order number[:\s]*(\d{8,12})/gi,
-                            /(\d{8,12})\s*orden/gi,
-                            /(\d{8,12})\s*order/gi
-                        ];
-                        orderPatterns.forEach(pattern => {
-                            const matches = text.match(pattern);
-                            if (matches) {
-                                matches.forEach(match => {
-                                    const numMatch = match.match(/\d{8,12}/);
-                                    if (numMatch) {
-                                        const value = numMatch[0];
-                                        // Filtrar números que parecen teléfonos o cédulas
-                                        if (value.length >= 8 && value.length <= 12 && 
-                                            !value.startsWith('809') && 
-                                            !value.startsWith('402') && 
-                                            !value.startsWith('829') &&
-                                            !value.startsWith('001') &&
-                                            !value.startsWith('012') &&
-                                            !value.startsWith('849') &&
-                                            !foundValues.includes(value)) {
-                                            foundValues.push(value);
-                                        }
-                                    }
-                                });
-                            }
-                        });
-                        
-                        // Buscar patrones específicos de números de orden en el texto
-                        const orderLines = text.split('\n').filter(line => 
-                            line.toLowerCase().includes('orden') || 
-                            line.toLowerCase().includes('order')
-                        );
-                        
-                        orderLines.forEach(line => {
-                            // Buscar patrones más específicos
-                            const specificPatterns = [
-                                /orden[:\s]*(\d{8,12})/gi,
-                                /order[:\s]*(\d{8,12})/gi,
-                                /(\d{8,12})\s*orden/gi,
-                                /(\d{8,12})\s*order/gi
-                            ];
-                            
-                            specificPatterns.forEach(pattern => {
-                                const matches = line.match(pattern);
-                                if (matches) {
-                                    matches.forEach(match => {
-                                        const numMatch = match.match(/\d{8,12}/);
-                                        if (numMatch) {
-                                            const value = numMatch[0];
-                                            // Filtros más estrictos
-                                            if (value.length >= 8 && value.length <= 12 && 
-                                                !value.startsWith('809') && 
-                                                !value.startsWith('402') && 
-                                                !value.startsWith('829') &&
-                                                !value.startsWith('001') &&
-                                                !value.startsWith('012') &&
-                                                !value.startsWith('849') &&
-                                                !value.startsWith('829') &&
-                                                !foundValues.includes(value)) {
-                                                foundValues.push(value);
-                                            }
-                                        }
-                                    });
-                                }
-                            });
-                        });
-                        break;
-                        
                     case 'cantidad de cajas':
                     case 'cajas':
                     case 'boxes':
@@ -1362,32 +1506,10 @@
                     case 'cliente':
                     case 'customer':
                     case 'client':
-                        // Buscar nombres de clientes
-                        const clientPatterns = [
-                            /cliente[:\s]*([A-Za-zÁáÉéÍíÓóÚúÑñ\s]+)/gi,
-                            /customer[:\s]*([A-Za-zÁáÉéÍíÓóÚúÑñ\s]+)/gi,
-                            /para[:\s]*([A-Za-zÁáÉéÍíÓóÚúÑñ\s]+)/gi,
-                            /nombre[:\s]*([A-Za-zÁáÉéÍíÓóÚúÑñ\s]+)/gi,
-                            /hi\s+([A-Za-zÁáÉéÍíÓóÚúÑñ\s]+)/gi,
-                            /hello\s+([A-Za-zÁáÉéÍíÓóÚúÑñ\s]+)/gi,
-                            /thanks\s+for\s+choosing\s+([A-Za-zÁáÉéÍíÓóÚúÑñ\s]+)/gi,
-                            /([A-Z][a-z]+\s+[A-Z][a-z]+)/g
-                        ];
-                        clientPatterns.forEach(pattern => {
-                            const matches = text.match(pattern);
-                            if (matches) {
-                                matches.forEach(match => {
-                                    let nameMatch = match.replace(/^(cliente|customer|para|nombre|hi|hello|thanks\s+for\s+choosing)[:\s]*/gi, '').trim();
-                                    // Si es un patrón de nombre completo, usar directamente
-                                    if (pattern.source.includes('[A-Z][a-z]+\\s+[A-Z][a-z]+')) {
-                                        nameMatch = match.trim();
-                                    }
-                                    if (nameMatch && nameMatch.length > 2 && !foundValues.includes(nameMatch)) {
-                                        foundValues.push(nameMatch);
-                                    }
-                                });
-                            }
-                        });
+                    case 'nombre':
+                    case 'name':
+                        // Ya procesado en la sección específica arriba
+                        console.log('⚠️ Campo ya procesado específicamente, saltando...');
                         break;
                         
                     case 'número de teléfono':
@@ -1849,10 +1971,10 @@
                                 // Validar que sea un número de orden válido (6-12 dígitos)
                                 if (value.length >= 6 && 
                                     value.length <= 12 && 
-                                    !foundValues.includes(value)) {
-                                    foundValues.push(value);
-                                    console.log(`✅ Orden encontrado en línea ${index + 1}: ${value}`);
-                                }
+                                            !foundValues.includes(value)) {
+                                            foundValues.push(value);
+                                            console.log(`✅ Orden encontrado en línea ${index + 1}: ${value}`);
+                                        }
                             }
                         });
                     });
@@ -1895,30 +2017,36 @@
                 case 'cliente':
                 case 'customer':
                 case 'client':
+                case 'nombre':
+                case 'name':
                         // Buscar nombres de clientes específicos del manifiesto
                         lines.forEach((line, index) => {
                             // Buscar exactamente "Cliente:" seguido del nombre
                             const namePatterns = [
-                                /Cliente:\s*([A-Za-zÁáÉéÍíÓóÚúÑñ\s\.]+?)(?=\s+Dirección|$)/gi
+                                /Cliente:\s*([^,]+?)(?=\s*[,]?\s*(?:Dirección|Teléfonos|Cédula)|$)/gi
                             ];
                             
                             namePatterns.forEach(pattern => {
                                 const matches = line.match(pattern);
                                 if (matches) {
                                     matches.forEach(match => {
-                                        const nameMatch = match.replace(/^Cliente:\s*/gi, '').trim();
-                                        // Solo tomar nombres válidos, sin información extra
-                                        if (nameMatch && 
-                                            nameMatch.length >= 3 && 
-                                            nameMatch.length <= 50 &&
-                                            !nameMatch.includes('Teléfonos') &&
+                                 const nameMatch = match.replace(/^Cliente:\s*/gi, '').trim();
+                                 // Solo tomar nombres válidos, sin información extra
+                                 if (nameMatch && 
+                                     nameMatch.length >= 3 && 
+                                     nameMatch.length <= 50 &&
+                                     !nameMatch.includes('Teléfonos') &&
                                             !nameMatch.includes('Dirección') &&
-                                            !nameMatch.includes('Cédula') &&
-                                            !nameMatch.includes('POS') &&
-                                            !nameMatch.includes(':') &&
+                                     !nameMatch.includes('Cédula') &&
+                                     !nameMatch.includes('POS') &&
+                                     !nameMatch.includes(':') &&
+                                     !nameMatch.includes('undefined') &&
                                             !foundValues.includes(nameMatch)) {
                                             foundValues.push(nameMatch);
-                                            console.log(`✅ Cliente encontrado en línea ${index + 1}: ${nameMatch}`);
+                                     console.log(`✅ Cliente encontrado en línea ${index + 1}: "${nameMatch}"`);
+                                 } else if (nameMatch === 'First Name Last Name') {
+                                     console.log(`🔍 "First Name Last Name" encontrado en línea ${index + 1}: "${nameMatch}"`);
+                                     foundValues.push(nameMatch);
                                         }
                                     });
                                 }
@@ -2075,6 +2203,17 @@
                 console.error('Error al exportar:', error);
                 alert('Error al exportar el archivo. Intenta de nuevo.');
             }
+        }
+        
+        // Función para mostrar mensajes de éxito
+        function showSuccess(message) {
+            const results = document.getElementById('results');
+            results.innerHTML = `
+                <div class="result-card success">
+                    <div class="success-badge">✅ Éxito</div>
+                    <p class="success-message">${message}</p>
+                </div>
+            `;
         }
         
         // Drag and drop
