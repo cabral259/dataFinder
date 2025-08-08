@@ -1,0 +1,16 @@
+
+    Control: A.5.1.1
+    Descripción: Política de seguridad de la información
+    Estado: Cumple
+    Evidencia: Documento de política aprobada
+    
+    Control: A.6.1.2
+    Descripción: Gestión de recursos humanos
+    Estado: No cumple
+    Evidencia: Falta documentación
+    
+    Control: A.9.2.3
+    Descripción: Control de acceso físico
+    Estado: Cumple parcialmente
+    Evidencia: Implementado parcialmente
+    

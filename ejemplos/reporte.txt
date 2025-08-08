@@ -1,0 +1,18 @@
+
+    REPORTE DE VENTAS - Q1 2024
+    
+    Resumen Ejecutivo:
+    - Ventas totales: $150,000
+    - Clientes nuevos: 25
+    - Producto más vendido: Software CRM
+    
+    Detalles por Región:
+    Norte: $45,000
+    Sur: $38,000
+    Este: $42,000
+    Oeste: $25,000
+    
+    Conclusiones:
+    El primer trimestre mostró un crecimiento del 15% 
+    comparado con el mismo período del año anterior.
+    

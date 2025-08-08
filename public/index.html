@@ -1,0 +1,2107 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📊 Extractor de Datos</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .main-content {
+            padding: 40px;
+        }
+
+        .upload-section {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            border: 2px dashed #dee2e6;
+            transition: all 0.3s ease;
+        }
+
+        .upload-section:hover {
+            border-color: #667eea;
+            background: #f0f2ff;
+        }
+
+        .upload-area {
+            text-align: center;
+            padding: 40px 20px;
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .file-label {
+            display: inline-block;
+            padding: 15px 30px;
+            background: #667eea;
+            color: white;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 1.1em;
+            transition: all 0.3s ease;
+            margin: 10px;
+        }
+
+        .file-label:hover {
+            background: #5a6fd8;
+            transform: translateY(-2px);
+        }
+
+        .extract-btn {
+            background: #28a745;
+            color: white;
+            padding: 15px 40px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.2em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 20px;
+        }
+
+        .extract-btn:hover {
+            background: #218838;
+            transform: translateY(-2px);
+        }
+
+        .extract-btn:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .file-list {
+            margin-top: 20px;
+            text-align: left;
+        }
+
+        .file-item {
+            background: white;
+            padding: 10px 15px;
+            margin: 5px 0;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .file-item .remove-btn {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.8em;
+        }
+
+        .results-section {
+            margin-top: 30px;
+        }
+
+        .result-card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin: 20px 0;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            border-left: 5px solid #28a745;
+        }
+
+        .result-card.error {
+            border-left-color: #dc3545;
+        }
+
+        .result-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .result-title {
+            font-size: 1.3em;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .result-status {
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: bold;
+        }
+
+        .result-status.success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .result-status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .result-details {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+
+        .result-data {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+
+        .stats-section {
+            background: #e9ecef;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-top: 15px;
+        }
+
+        .stat-item {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 2em;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .stat-label {
+            color: #6c757d;
+            font-size: 0.9em;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #667eea;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .supported-formats {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+
+        .format-badge {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 5px 12px;
+            border-radius: 15px;
+            margin: 5px;
+            font-size: 0.9em;
+        }
+
+        /* Estilos para tablas de Excel */
+        .excel-data {
+            margin-top: 20px;
+        }
+
+        .sheet-section {
+            margin-bottom: 30px;
+        }
+
+        .sheet-section h4 {
+            color: #333;
+            margin-bottom: 15px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .table-container {
+            overflow-x: auto;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            font-size: 0.9em;
+        }
+
+        .data-table th {
+            background: #667eea;
+            color: white;
+            padding: 12px 8px;
+            text-align: left;
+            font-weight: bold;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .data-table td {
+            padding: 10px 8px;
+            border-bottom: 1px solid #eee;
+            vertical-align: top;
+        }
+
+        .data-table tr:nth-child(even) {
+            background: #f8f9fa;
+        }
+
+        .data-table tr:hover {
+            background: #e3f2fd;
+        }
+
+        /* Resaltado de palabras clave */
+        .highlight {
+            background: #ffeb3b;
+            padding: 2px 4px;
+            border-radius: 4px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        /* Estilos para texto de PDF/Word */
+        .text-data {
+            margin-top: 20px;
+        }
+
+        .text-content {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #28a745;
+            line-height: 1.6;
+            font-size: 1em;
+            color: #333;
+            max-height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+
+        .copy-btn {
+            background: #28a745;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 15px;
+            font-size: 0.9em;
+            transition: all 0.3s ease;
+        }
+
+        .copy-btn:hover {
+            background: #218838;
+            transform: translateY(-1px);
+        }
+
+        /* Estilos para botones de exportación */
+        .export-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 15px;
+        }
+
+        .export-btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: all 0.3s ease;
+            color: white;
+            font-weight: bold;
+        }
+
+        .export-btn.pdf {
+            background: #dc3545;
+        }
+
+        .export-btn.pdf:hover {
+            background: #c82333;
+            transform: translateY(-1px);
+        }
+
+        .export-btn.word {
+            background: #0078d4;
+        }
+
+        .export-btn.word:hover {
+            background: #106ebe;
+            transform: translateY(-1px);
+        }
+
+        .export-btn.excel {
+            background: #217346;
+        }
+
+        .export-btn.excel:hover {
+            background: #1e6b3d;
+            transform: translateY(-1px);
+        }
+
+        /* Estilos para resumen estructurado */
+        .structured-summary {
+            margin: 20px 0;
+        }
+
+        .category-summary {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 15px;
+            margin: 10px 0;
+            border-left: 4px solid #667eea;
+        }
+
+        .category-summary h4 {
+            margin: 0 0 10px 0;
+            color: #333;
+            font-size: 1.1em;
+        }
+
+        .values-preview {
+            margin: 0;
+            color: #666;
+            font-size: 0.9em;
+            line-height: 1.4;
+        }
+
+        .text-details {
+            margin-top: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .text-details summary {
+            padding: 15px;
+            background: #e9ecef;
+            cursor: pointer;
+            font-weight: bold;
+            color: #333;
+            transition: background-color 0.3s ease;
+        }
+
+        .text-details summary:hover {
+            background: #dee2e6;
+        }
+
+        .text-details .text-content {
+            padding: 15px;
+            max-height: 300px;
+            overflow-y: auto;
+            background: white;
+        }
+
+        /* Notificación de copia */
+        .copy-notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #28a745;
+            color: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 1000;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        /* Estilos para opciones de extracción */
+        .extraction-options {
+            margin: 20px 0;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            border: 1px solid #dee2e6;
+        }
+
+        .extraction-options h4 {
+            margin: 0 0 15px 0;
+            color: #333;
+            font-size: 1.1em;
+        }
+
+        .option-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .radio-label {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            padding: 10px;
+            border-radius: 8px;
+            transition: background-color 0.3s ease;
+        }
+
+        .radio-label:hover {
+            background: #e9ecef;
+        }
+
+        .radio-label input[type="radio"] {
+            margin-right: 10px;
+            transform: scale(1.2);
+        }
+
+        .radio-label span {
+            font-size: 1em;
+            color: #333;
+        }
+
+        .specific-fields {
+            margin-top: 15px;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+        }
+
+        #fieldInput {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-size: 0.9em;
+            resize: vertical;
+            transition: border-color 0.3s ease;
+        }
+
+        #fieldInput:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .help-text {
+            margin-top: 10px;
+            font-size: 0.85em;
+            color: #6c757d;
+            line-height: 1.4;
+        }
+
+        .no-data-message {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            color: #856404;
+        }
+
+        .no-data-message p {
+            margin: 5px 0;
+        }
+
+        /* Responsive para tablas */
+        @media (max-width: 768px) {
+            .data-table {
+                font-size: 0.8em;
+            }
+            
+            .data-table th,
+            .data-table td {
+                padding: 8px 4px;
+            }
+            
+            .option-group {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Extractor de Datos</h1>
+            <p>Sube archivos PDF, Excel o Word para extraer sus datos automáticamente</p>
+        </div>
+
+        <div class="main-content">
+            <div class="upload-section">
+                <div class="upload-area">
+                    <h3>Selecciona tus archivos</h3>
+                    <p>Arrastra archivos aquí o haz clic para seleccionar</p>
+                    
+                    <input type="file" id="fileInput" class="file-input" multiple accept=".pdf,.xlsx,.xls,.docx,.doc,.txt">
+                    <label for="fileInput" class="file-label">Seleccionar Archivos</label>
+                    
+                    <br>
+                    
+                    <div class="extraction-options">
+                        <h4>¿Qué quieres extraer?</h4>
+                        <div class="option-group">
+                            <label class="radio-label">
+                                <input type="radio" name="extractionType" value="all" checked>
+                                <span>Todo el contenido</span>
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="extractionType" value="specific">
+                                <span>Solo campos específicos</span>
+                            </label>
+                        </div>
+                        
+                        <div id="specificFields" class="specific-fields" style="display: none;">
+                            <textarea 
+                                id="fieldInput" 
+                                placeholder="Escribe los campos que quieres extraer, uno por línea. Ejemplos:&#10;número de orden&#10;cantidad de cajas&#10;nombre del cliente&#10;número de teléfono&#10;dirección&#10;&#10;Nota: Para manifestos de carga, usa estos campos específicos&#10;El sistema detectará automáticamente el tipo de documento"
+                                rows="8"
+                                disabled
+                            ></textarea>
+                            <p class="help-text">
+                                <strong>Para Excel:</strong> Nombres de columnas<br>
+                                <strong>Para PDF/Word:</strong> Palabras clave o frases
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <button id="extractBtn" class="extract-btn" disabled>Extraer Datos</button>
+                </div>
+
+                <div id="fileList" class="file-list"></div>
+            </div>
+
+            <div class="supported-formats">
+                <h4>Formatos Soportados:</h4>
+                <span class="format-badge">PDF (.pdf)</span>
+                <span class="format-badge">Excel (.xlsx, .xls)</span>
+                <span class="format-badge">Word (.docx, .doc)</span>
+            </div>
+
+            <div id="loading" class="loading" style="display: none;">
+                <div class="spinner"></div>
+                <p>Procesando archivos...</p>
+            </div>
+
+            <div id="results" class="results-section"></div>
+
+            <div id="stats" class="stats-section" style="display: none;">
+                <h3>Estadísticas del Procesamiento</h3>
+                <div id="statsGrid" class="stats-grid"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let selectedFiles = [];
+
+        // Elementos del DOM
+        const fileInput = document.getElementById('fileInput');
+        const fileList = document.getElementById('fileList');
+        const extractBtn = document.getElementById('extractBtn');
+        const loading = document.getElementById('loading');
+        const results = document.getElementById('results');
+        const stats = document.getElementById('stats');
+        const statsGrid = document.getElementById('statsGrid');
+        const specificFields = document.getElementById('specificFields');
+        const fieldInput = document.getElementById('fieldInput');
+
+        // Manejar selección de archivos
+        fileInput.addEventListener('change', (e) => {
+            selectedFiles = Array.from(e.target.files);
+            updateFileList();
+            updateExtractButton();
+        });
+
+        // Manejar opciones de extracción
+        document.querySelectorAll('input[name="extractionType"]').forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                console.log('🎯 Opción de extracción cambiada:', e.target.value);
+                if (e.target.value === 'specific') {
+                    specificFields.style.display = 'block';
+                    fieldInput.disabled = false;
+                    fieldInput.focus();
+                    console.log('✅ Campos específicos habilitados');
+                } else {
+                    specificFields.style.display = 'none';
+                    fieldInput.disabled = true;
+                    console.log('❌ Campos específicos deshabilitados');
+                }
+            });
+        });
+
+        // Actualizar lista de archivos
+        function updateFileList() {
+            fileList.innerHTML = '';
+            
+            selectedFiles.forEach((file, index) => {
+                const fileItem = document.createElement('div');
+                fileItem.className = 'file-item';
+                
+                const fileName = document.createElement('span');
+                fileName.textContent = `${file.name} (${formatFileSize(file.size)})`;
+                
+                const removeBtn = document.createElement('button');
+                removeBtn.className = 'remove-btn';
+                removeBtn.textContent = '❌';
+                removeBtn.onclick = () => removeFile(index);
+                
+                fileItem.appendChild(fileName);
+                fileItem.appendChild(removeBtn);
+                fileList.appendChild(fileItem);
+            });
+        }
+
+        // Remover archivo
+        function removeFile(index) {
+            selectedFiles.splice(index, 1);
+            updateFileList();
+            updateExtractButton();
+        }
+
+        // Actualizar botón de extracción
+        function updateExtractButton() {
+            extractBtn.disabled = selectedFiles.length === 0;
+        }
+
+        // Formatear tamaño de archivo
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // Extraer datos
+        extractBtn.addEventListener('click', async () => {
+            if (selectedFiles.length === 0) return;
+
+            // Mostrar loading
+            loading.style.display = 'block';
+            results.innerHTML = '';
+            stats.style.display = 'none';
+
+            const formData = new FormData();
+            selectedFiles.forEach(file => {
+                formData.append('files', file);
+            });
+
+            // Agregar opciones de extracción
+            const extractionType = document.querySelector('input[name="extractionType"]:checked').value;
+            formData.append('extractionType', extractionType);
+            
+            if (extractionType === 'specific') {
+                const fields = fieldInput.value.split('\n').filter(field => field.trim() !== '');
+                formData.append('specificFields', JSON.stringify(fields));
+            }
+
+            try {
+                const response = await fetch('/api/extract', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    displayResults(data.results);
+                    if (data.stats) {
+                        displayStats(data.stats);
+                    }
+                } else {
+                    results.innerHTML = `
+                        <div class="result-card error">
+                            <div class="result-header">
+                                <div class="result-title">❌ Error</div>
+                                <div class="result-status error">Error</div>
+                            </div>
+                            <div class="result-details">
+                                <p><strong>Error:</strong> ${data.error}</p>
+                            </div>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                results.innerHTML = `
+                    <div class="result-card error">
+                        <div class="result-header">
+                            <div class="result-title">❌ Error de Conexión</div>
+                            <div class="result-status error">Error</div>
+                        </div>
+                        <div class="result-details">
+                            <p><strong>Error:</strong> ${error.message}</p>
+                        </div>
+                    </div>
+                `;
+            } finally {
+                loading.style.display = 'none';
+            }
+        });
+
+        // Mostrar resultados
+        function displayResults(resultsArray) {
+            const resultsContainer = document.getElementById('results');
+            resultsContainer.innerHTML = '<h2>📋 Resultados de la Extracción</h2>';
+            
+            resultsArray.forEach(result => {
+                const card = document.createElement('div');
+                card.className = `result-card ${result.success ? 'success' : 'error'}`;
+                
+                // Definir las clases y textos de estado
+                const statusClass = result.success ? 'success' : 'error';
+                const statusText = result.success ? '✅ Exitoso' : '❌ Fallido';
+                
+                if (!result.success) {
+                    card.innerHTML = `
+                        <div class="error-badge">❌ Error al procesar el archivo</div>
+                        <p class="error-message">${result.error || 'Error desconocido'}</p>
+                    `;
+                    resultsContainer.appendChild(card);
+                    return;
+                }
+                
+                let dataContent = '';
+                if (result.success && result.data) {
+                    if (result.fileType === '.xlsx' || result.fileType === '.xls') {
+                        // Crear tabla HTML para Excel
+                        const tableContent = result.data.sheets.map(sheet => {
+                            if (sheet.data.length === 0) return '';
+                            
+                            const headers = sheet.data[0] || [];
+                            const rows = sheet.data.slice(1);
+                            
+                            let tableHTML = `
+                                <div class="sheet-section">
+                                    <h4>📊 Hoja: ${sheet.name}</h4>
+                                    <div class="table-container">
+                                        <table class="data-table">
+                                            <thead>
+                                                <tr>
+                                                    ${headers.map(header => `<th>${header || ''}</th>`).join('')}
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                ${rows.map(row => `
+                                                    <tr>
+                                                        ${row.map(cell => {
+                                                            const cellValue = cell || '';
+                                                            const highlightedValue = highlightKeywords(cellValue);
+                                                            return `<td>${highlightedValue}</td>`;
+                                                        }).join('')}
+                                                    </tr>
+                                                `).join('')}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            `;
+                            
+                            return tableHTML;
+                        }).join('');
+                        
+                        // Si no hay datos en la tabla, mostrar mensaje
+                        if (!tableContent || tableContent.trim() === '') {
+                            tableContent = `
+                                <div class="sheet-section">
+                                    <h4>📊 Hoja: ${result.data.sheets[0]?.name || 'Sheet1'}</h4>
+                                    <div class="no-data-message">
+                                        <p>⚠️ No se encontraron datos que coincidan con los criterios de búsqueda.</p>
+                                        <p>💡 Intenta con palabras clave más generales o revisa el contenido del archivo.</p>
+                                    </div>
+                                </div>
+                            `;
+                        }
+                        
+                        dataContent = `
+                            <div class="result-details">
+                                <p><strong>📋 Hojas encontradas:</strong> ${result.data.sheetNames.join(', ')}</p>
+                                ${result.data.sheets.map(sheet => `
+                                    <p><strong>📊 Hoja "${sheet.name}":</strong> ${sheet.rowCount} filas, ${sheet.columnCount} columnas</p>
+                                `).join('')}
+                            </div>
+                            <div class="excel-data">
+                                ${tableContent}
+                            </div>
+                        `;
+                    } else {
+                        // Visualización limpia para PDF/Word
+                        const text = result.data.text || '';
+                        
+                        // Intentar detectar datos estructurados y mostrarlos en tabla
+                        const extractionType = document.querySelector('input[name="extractionType"]:checked').value;
+                        let structuredData = [];
+                        
+                        if (extractionType === 'specific') {
+                            // Usar los campos específicos definidos por el usuario
+                            const userFields = fieldInput.value.split('\n').filter(field => field.trim() !== '');
+                            structuredData = extractSpecificFields(text, userFields);
+                        } else {
+                            // Detección automática para "todo el contenido"
+                            structuredData = detectStructuredData(text);
+                        }
+                        
+                        // Asegurarnos de que los datos estén en el formato correcto para mostrar y exportar
+                        if (Array.isArray(structuredData) && structuredData.length > 0) {
+                            // Si los datos vienen en el formato antiguo (con values array)
+                            if (structuredData[0].values) {
+                                const newStructuredData = [];
+                                structuredData.forEach(item => {
+                                    if (item.values && Array.isArray(item.values)) {
+                                        item.values.forEach(value => {
+                                            newStructuredData.push({
+                                                label: item.field || 'Orden',
+                                                value: value
+                                            });
+                                        });
+                                    }
+                                });
+                                structuredData = newStructuredData;
+                            }
+                        }
+                        
+                        if (structuredData.length > 0) {
+                            // Agrupar datos por categoría para mostrar
+                            const groupedData = {};
+                            structuredData.forEach(item => {
+                                if (!groupedData[item.label]) {
+                                    groupedData[item.label] = [];
+                                }
+                                groupedData[item.label].push(item.value);
+                            });
+                            
+                            // Crear resumen mostrando todos los valores
+                            const summaryHTML = Object.keys(groupedData).map(category => {
+                                const values = groupedData[category];
+                                const displayValues = values.join(', ');
+                                
+                                return `
+                                    <div class="category-summary">
+                                        <h4>📋 ${category} (${values.length} elementos)</h4>
+                                        <div class="table-container">
+                                            <table class="data-table">
+                                                <thead>
+                                                    <tr>
+                                                        <th>#</th>
+                                                        <th>Valor</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    ${values.map((value, index) => `
+                                                        <tr>
+                                                            <td>${index + 1}</td>
+                                                            <td>${value}</td>
+                                                        </tr>
+                                                    `).join('')}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('');
+                            
+                            dataContent = `
+                                <div class="result-details">
+                                    <p><strong>📊 Datos estructurados encontrados (${structuredData.length} elementos):</strong></p>
+                                </div>
+                                <div class="structured-summary">
+                                    ${summaryHTML}
+                                </div>
+                                <div class="export-buttons">
+                                    <button class="copy-btn" onclick="copyToClipboard('${text.replace(/'/g, "\\'")}')">
+                                        📋 Copiar texto
+                                    </button>
+                                    <button class="export-btn pdf" onclick="exportResults('${result.fileName}', 'pdf', '${safeBase64Encode(JSON.stringify(structuredData))}', '${safeBase64Encode(text)}')">
+                                        📄 Exportar PDF
+                                    </button>
+                                    <button class="export-btn word" onclick="exportResults('${result.fileName}', 'word', '${safeBase64Encode(JSON.stringify(structuredData))}', '${safeBase64Encode(text)}')">
+                                        📝 Exportar Word
+                                    </button>
+                                    <button class="export-btn excel" onclick="exportResults('${result.fileName}', 'excel', '${safeBase64Encode(JSON.stringify(structuredData))}', '${safeBase64Encode(text)}')">
+                                        📊 Exportar Excel
+                                    </button>
+                                </div>
+                                <details class="text-details">
+                                    <summary>📝 Ver texto completo extraído</summary>
+                                    <div class="text-content">${formatText(text)}</div>
+                                </details>
+                            `;
+                        } else {
+                            // Mostrar solo texto si no hay datos estructurados
+                            const formattedText = formatText(text);
+                            
+                            dataContent = `
+                                <div class="result-details">
+                                    <p><strong>📝 Texto extraído (${text.length} caracteres):</strong></p>
+                                </div>
+                                <div class="text-data">
+                                    <div class="text-content">${formattedText}</div>
+                                    <button class="copy-btn" onclick="copyToClipboard('${text.replace(/'/g, "\\'")}')">
+                                        📋 Copiar texto
+                                    </button>
+                                </div>
+                            `;
+                        }
+                    }
+                } else {
+                    dataContent = `
+                        <div class="result-details">
+                            <p><strong>Error:</strong> ${result.error}</p>
+                        </div>
+                    `;
+                }
+                
+                card.innerHTML = `
+                    <div class="result-header">
+                        <div class="result-title">Resultados de Extracción</div>
+                        <div class="result-status ${statusClass}">${statusText}</div>
+                    </div>
+                    <div class="result-details">
+                        <p><strong>Tipo:</strong> ${result.fileType}</p>
+                        <p><strong>Procesado:</strong> ${new Date(result.extractedAt).toLocaleString()}</p>
+                    </div>
+                    ${dataContent}
+                `;
+                
+                resultsContainer.appendChild(card);
+            });
+        }
+
+        // Mostrar estadísticas
+        function displayStats(statsData) {
+            const statsContainer = document.getElementById('stats');
+            const statsGridContainer = document.getElementById('statsGrid');
+            
+            if (statsContainer && statsGridContainer) {
+                statsContainer.style.display = 'block';
+                
+                statsGridContainer.innerHTML = `
+                    <div class="stat-item">
+                        <div class="stat-number">${statsData.totalFiles}</div>
+                        <div class="stat-label">Total de Archivos</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-number">${statsData.successful}</div>
+                        <div class="stat-label">Exitosos</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-number">${statsData.failed}</div>
+                        <div class="stat-label">Fallidos</div>
+                    </div>
+                `;
+            }
+        }
+
+        // Funciones auxiliares
+        function highlightKeywords(text) {
+            if (!text) return '';
+            
+            const keywords = [
+                'cumple', 'no cumple', 'cumple parcialmente',
+                'aprobado', 'rechazado', 'pendiente',
+                'si', 'no', 'n/a', 'na',
+                'completo', 'incompleto',
+                'verificado', 'no verificado',
+                'implementado', 'no implementado'
+            ];
+            
+            let highlightedText = text.toString();
+            
+            keywords.forEach(keyword => {
+                const regex = new RegExp(`\\b${keyword}\\b`, 'gi');
+                highlightedText = highlightedText.replace(regex, `<span class="highlight">${keyword}</span>`);
+            });
+            
+            return highlightedText;
+        }
+        
+        function formatText(text) {
+            if (!text) return '';
+            
+            // Reemplazar múltiples espacios con uno solo
+            let formatted = text.replace(/\s+/g, ' ');
+            
+            // Agregar saltos de línea después de puntos
+            formatted = formatted.replace(/\.\s+/g, '.\n\n');
+            
+            // Agregar saltos de línea después de dos puntos
+            formatted = formatted.replace(/:\s+/g, ':\n');
+            
+            // Convertir a HTML preservando saltos de línea
+            formatted = formatted.replace(/\n/g, '<br>');
+            
+            return formatted;
+        }
+        
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                // Mostrar notificación de éxito
+                const notification = document.createElement('div');
+                notification.className = 'copy-notification';
+                notification.textContent = '✅ Texto copiado al portapapeles';
+                document.body.appendChild(notification);
+                
+                setTimeout(() => {
+                    notification.remove();
+                }, 2000);
+            }).catch(err => {
+                console.error('Error al copiar:', err);
+            });
+        }
+        
+        // Función para codificar texto UTF-8 a base64 de forma segura
+        function safeBase64Encode(str) {
+            try {
+                // Convertir a UTF-8 y luego a base64
+                return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g,
+                    function toSolidBytes(match, p1) {
+                        return String.fromCharCode('0x' + p1);
+                    }));
+            } catch (error) {
+                console.warn('Error encoding to base64:', error);
+                // Fallback: remover caracteres problemáticos
+                const cleanStr = str.replace(/[^\x00-\x7F]/g, "");
+                try {
+                    return btoa(cleanStr);
+                } catch (fallbackError) {
+                    console.error('Fallback encoding also failed:', fallbackError);
+                    return btoa('Error: No se pudo codificar el texto');
+                }
+            }
+        }
+        
+        // Función para decodificar texto base64 a UTF-8 de forma segura
+        function safeBase64Decode(str) {
+            try {
+                return decodeURIComponent(atob(str).split('').map(function(c) {
+                    return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+                }).join(''));
+            } catch (error) {
+                console.warn('Error decoding from base64:', error);
+                try {
+                    // Fallback: decodificación simple
+                    return atob(str);
+                } catch (fallbackError) {
+                    console.error('Fallback decoding also failed:', fallbackError);
+                    return 'Error: No se pudo decodificar el texto';
+                }
+            }
+        }
+        
+        // Función para extraer campos específicos definidos por el usuario
+        function extractSpecificFields(text, userFields) {
+            const structuredData = [];
+            
+            if (!text || !userFields || userFields.length === 0) return structuredData;
+            
+            // Limpiar y normalizar los campos solicitados
+            const normalizedUserFields = userFields.map(field => field.trim().toLowerCase());
+            
+            console.log('📋 Campos solicitados:', normalizedUserFields);
+            
+            // Si se solicita número de orden, extraer directamente
+            if (normalizedUserFields.some(field => 
+                field.includes('orden') || 
+                field.includes('order') || 
+                field.includes('no.'))) {
+                
+                // Extraer todos los números de orden que empiecen con 6000 o 7000
+                const orderRegex = /Orden:\s*((?:6|7)0{3}\d{6})/g;
+                const matches = [...text.matchAll(orderRegex)];
+                
+                if (matches.length > 0) {
+                    // Eliminar duplicados usando Set
+                    const uniqueOrders = [...new Set(matches.map(m => m[1]))];
+                    structuredData.push({
+                        field: 'Número de Orden',
+                        values: uniqueOrders
+                    });
+                }
+            }
+            
+            userFields.forEach(field => {
+                const fieldName = field.trim().toLowerCase();
+                let foundValues = [];
+                
+                // Patrones específicos para cada tipo de campo
+                switch (fieldName) {
+                    case 'número de orden':
+                    case 'numero de orden':
+                    case 'order':
+                    case 'orden':
+                        // Buscar números de orden específicos
+                        const orderPatterns = [
+                            /orden[:\s]*(\d{8,12})/gi,
+                            /order[:\s]*(\d{8,12})/gi,
+                            /número[:\s]*(\d{8,12})/gi,
+                            /número de orden[:\s]*(\d{8,12})/gi,
+                            /order number[:\s]*(\d{8,12})/gi,
+                            /(\d{8,12})\s*orden/gi,
+                            /(\d{8,12})\s*order/gi
+                        ];
+                        orderPatterns.forEach(pattern => {
+                            const matches = text.match(pattern);
+                            if (matches) {
+                                matches.forEach(match => {
+                                    const numMatch = match.match(/\d{8,12}/);
+                                    if (numMatch) {
+                                        const value = numMatch[0];
+                                        // Filtrar números que parecen teléfonos o cédulas
+                                        if (value.length >= 8 && value.length <= 12 && 
+                                            !value.startsWith('809') && 
+                                            !value.startsWith('402') && 
+                                            !value.startsWith('829') &&
+                                            !value.startsWith('001') &&
+                                            !value.startsWith('012') &&
+                                            !value.startsWith('849') &&
+                                            !foundValues.includes(value)) {
+                                            foundValues.push(value);
+                                        }
+                                    }
+                                });
+                            }
+                        });
+                        
+                        // Buscar patrones específicos de números de orden en el texto
+                        const orderLines = text.split('\n').filter(line => 
+                            line.toLowerCase().includes('orden') || 
+                            line.toLowerCase().includes('order')
+                        );
+                        
+                        orderLines.forEach(line => {
+                            // Buscar patrones más específicos
+                            const specificPatterns = [
+                                /orden[:\s]*(\d{8,12})/gi,
+                                /order[:\s]*(\d{8,12})/gi,
+                                /(\d{8,12})\s*orden/gi,
+                                /(\d{8,12})\s*order/gi
+                            ];
+                            
+                            specificPatterns.forEach(pattern => {
+                                const matches = line.match(pattern);
+                                if (matches) {
+                                    matches.forEach(match => {
+                                        const numMatch = match.match(/\d{8,12}/);
+                                        if (numMatch) {
+                                            const value = numMatch[0];
+                                            // Filtros más estrictos
+                                            if (value.length >= 8 && value.length <= 12 && 
+                                                !value.startsWith('809') && 
+                                                !value.startsWith('402') && 
+                                                !value.startsWith('829') &&
+                                                !value.startsWith('001') &&
+                                                !value.startsWith('012') &&
+                                                !value.startsWith('849') &&
+                                                !value.startsWith('829') &&
+                                                !foundValues.includes(value)) {
+                                                foundValues.push(value);
+                                            }
+                                        }
+                                    });
+                                }
+                            });
+                        });
+                        break;
+                        
+                    case 'cantidad de cajas':
+                    case 'cajas':
+                    case 'boxes':
+                        // Buscar cantidades de cajas específicas
+                        const boxPatterns = [
+                            /(\d+)\s*cajas?/gi,
+                            /cajas?[:\s]*(\d+)/gi,
+                            /boxes?[:\s]*(\d+)/gi,
+                            /cantidad[:\s]*(\d+)/gi,
+                            /qty[:\s]*(\d+)/gi,
+                            /quantity[:\s]*(\d+)/gi,
+                            /(\d+)\s*units?/gi,
+                            /units?[:\s]*(\d+)/gi,
+                            /cantidad de cajas[:\s]*(\d+)/gi,
+                            /number of boxes[:\s]*(\d+)/gi,
+                            /(\d+)\s*piezas?/gi,
+                            /piezas?[:\s]*(\d+)/gi
+                        ];
+                        boxPatterns.forEach(pattern => {
+                            const matches = text.match(pattern);
+                            if (matches) {
+                                matches.forEach(match => {
+                                    const numMatch = match.match(/\d+/);
+                                    if (numMatch) {
+                                        const value = parseInt(numMatch[0]);
+                                        // Solo números razonables para cajas (1-1000)
+                                        if (value >= 1 && value <= 1000 && !foundValues.includes(value.toString())) {
+                                            foundValues.push(value.toString());
+                                        }
+                                    }
+                                });
+                            }
+                        });
+                        
+                        // Buscar líneas que contengan información de cajas
+                        const boxLines = text.split('\n').filter(line => 
+                            line.toLowerCase().includes('caja') || 
+                            line.toLowerCase().includes('box') ||
+                            line.toLowerCase().includes('cantidad') ||
+                            line.toLowerCase().includes('quantity') ||
+                            line.toLowerCase().includes('qty') ||
+                            line.toLowerCase().includes('pieza')
+                        );
+                        
+                        boxLines.forEach(line => {
+                            // Buscar patrones más específicos para cantidades
+                            const quantityPatterns = [
+                                /(\d+)\s*cajas?/gi,
+                                /cajas?[:\s]*(\d+)/gi,
+                                /cantidad[:\s]*(\d+)/gi,
+                                /quantity[:\s]*(\d+)/gi,
+                                /qty[:\s]*(\d+)/gi
+                            ];
+                            
+                            quantityPatterns.forEach(pattern => {
+                                const matches = line.match(pattern);
+                                if (matches) {
+                                    matches.forEach(match => {
+                                        const numMatch = match.match(/\d+/);
+                                        if (numMatch) {
+                                            const value = parseInt(numMatch[0]);
+                                            // Solo números razonables para cajas (1-50)
+                                            if (value >= 1 && value <= 50 && !foundValues.includes(value.toString())) {
+                                                foundValues.push(value.toString());
+                                            }
+                                        }
+                                    });
+                                }
+                            });
+                        });
+                        break;
+                        
+                    case 'nombre del cliente':
+                    case 'cliente':
+                    case 'customer':
+                    case 'client':
+                        // Buscar nombres de clientes
+                        const clientPatterns = [
+                            /cliente[:\s]*([A-Za-zÁáÉéÍíÓóÚúÑñ\s]+)/gi,
+                            /customer[:\s]*([A-Za-zÁáÉéÍíÓóÚúÑñ\s]+)/gi,
+                            /para[:\s]*([A-Za-zÁáÉéÍíÓóÚúÑñ\s]+)/gi,
+                            /nombre[:\s]*([A-Za-zÁáÉéÍíÓóÚúÑñ\s]+)/gi,
+                            /hi\s+([A-Za-zÁáÉéÍíÓóÚúÑñ\s]+)/gi,
+                            /hello\s+([A-Za-zÁáÉéÍíÓóÚúÑñ\s]+)/gi,
+                            /thanks\s+for\s+choosing\s+([A-Za-zÁáÉéÍíÓóÚúÑñ\s]+)/gi,
+                            /([A-Z][a-z]+\s+[A-Z][a-z]+)/g
+                        ];
+                        clientPatterns.forEach(pattern => {
+                            const matches = text.match(pattern);
+                            if (matches) {
+                                matches.forEach(match => {
+                                    let nameMatch = match.replace(/^(cliente|customer|para|nombre|hi|hello|thanks\s+for\s+choosing)[:\s]*/gi, '').trim();
+                                    // Si es un patrón de nombre completo, usar directamente
+                                    if (pattern.source.includes('[A-Z][a-z]+\\s+[A-Z][a-z]+')) {
+                                        nameMatch = match.trim();
+                                    }
+                                    if (nameMatch && nameMatch.length > 2 && !foundValues.includes(nameMatch)) {
+                                        foundValues.push(nameMatch);
+                                    }
+                                });
+                            }
+                        });
+                        break;
+                        
+                    case 'número de teléfono':
+                    case 'teléfono':
+                    case 'phone':
+                        // Buscar números de teléfono específicos
+                        const phonePatterns = [
+                            /teléfono[:\s]*(\d{10})/gi,
+                            /phone[:\s]*(\d{10})/gi,
+                            /(\d{3}[-.\s]?\d{3}[-.\s]?\d{4})/g,
+                            /(\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g
+                        ];
+                        phonePatterns.forEach(pattern => {
+                            const matches = text.match(pattern);
+                            if (matches) {
+                                matches.forEach(match => {
+                                    // Extraer solo números
+                                    const phoneMatch = match.replace(/[^\d]/g, '');
+                                    if (phoneMatch.length >= 10 && 
+                                        (phoneMatch.startsWith('809') || 
+                                         phoneMatch.startsWith('829') ||
+                                         phoneMatch.startsWith('849')) &&
+                                        !foundValues.includes(phoneMatch)) {
+                                        foundValues.push(phoneMatch);
+                                    }
+                                });
+                            }
+                        });
+                        
+                        // Buscar líneas que contengan teléfonos
+                        const phoneLines = text.split('\n').filter(line => 
+                            line.toLowerCase().includes('teléfono') || 
+                            line.toLowerCase().includes('phone')
+                        );
+                        
+                        phoneLines.forEach(line => {
+                            const numbers = line.match(/\d{10}/g);
+                            if (numbers) {
+                                numbers.forEach(num => {
+                                    if ((num.startsWith('809') || 
+                                         num.startsWith('829') ||
+                                         num.startsWith('849')) &&
+                                        !foundValues.includes(num)) {
+                                        foundValues.push(num);
+                                    }
+                                });
+                            }
+                        });
+                        break;
+                        
+                    case 'dirección':
+                    case 'address':
+                        // Buscar direcciones específicas
+                        const addressPatterns = [
+                            /dirección[:\s]*([^.\n]{10,100})/gi,
+                            /address[:\s]*([^.\n]{10,100})/gi,
+                            /shipping address[:\s]*([^.\n]{10,100})/gi,
+                            /envío[:\s]*([^.\n]{10,100})/gi,
+                            /shipping[:\s]*([^.\n]{10,100})/gi,
+                            /delivery[:\s]*([^.\n]{10,100})/gi,
+                            /envío a[:\s]*([^.\n]{10,100})/gi
+                        ];
+                        addressPatterns.forEach(pattern => {
+                            const matches = text.match(pattern);
+                            if (matches) {
+                                matches.forEach(match => {
+                                    const addressMatch = match.replace(/^(dirección|address|shipping address|envío|shipping|delivery|envío a)[:\s]*/gi, '').trim();
+                                    // Verificar que sea una dirección válida (contenga palabras comunes de direcciones)
+                                    if (addressMatch && 
+                                        addressMatch.length >= 10 && 
+                                        addressMatch.length <= 100 &&
+                                        (addressMatch.includes('Calle') || 
+                                         addressMatch.includes('Avenida') || 
+                                         addressMatch.includes('Ave') ||
+                                         addressMatch.includes('Street') ||
+                                         addressMatch.includes('Road') ||
+                                         addressMatch.includes('Boulevard') ||
+                                         addressMatch.includes('Plaza') ||
+                                         addressMatch.includes('Sector') ||
+                                         addressMatch.includes('Zona') ||
+                                         addressMatch.includes('República') ||
+                                         addressMatch.includes('Dominicana') ||
+                                         addressMatch.includes('Santo Domingo') ||
+                                         addressMatch.includes('Santiago') ||
+                                         addressMatch.includes('Puerto Plata')) &&
+                                        !foundValues.includes(addressMatch)) {
+                                        foundValues.push(addressMatch);
+                                    }
+                                });
+                            }
+                        });
+                        
+                        // Buscar líneas que contengan direcciones
+                        const addressLines = text.split('\n').filter(line => 
+                            line.toLowerCase().includes('dirección') || 
+                            line.toLowerCase().includes('address') ||
+                            line.toLowerCase().includes('shipping') ||
+                            line.toLowerCase().includes('envío')
+                        );
+                        
+                        addressLines.forEach(line => {
+                            // Extraer texto que parezca una dirección
+                            const addressMatch = line.match(/(?:dirección|address|shipping|envío)[:\s]*(.+)/i);
+                            if (addressMatch) {
+                                const address = addressMatch[1].trim();
+                                // Filtrar direcciones más específicas
+                                if (address.length >= 10 && 
+                                    address.length <= 100 &&
+                                    (address.includes('Calle') || 
+                                     address.includes('Avenida') || 
+                                     address.includes('Ave') ||
+                                     address.includes('Street') ||
+                                     address.includes('Road') ||
+                                     address.includes('Boulevard') ||
+                                     address.includes('Plaza') ||
+                                     address.includes('Sector') ||
+                                     address.includes('Zona') ||
+                                     address.includes('República') ||
+                                     address.includes('Dominicana') ||
+                                     address.includes('Santo Domingo') ||
+                                     address.includes('Santiago') ||
+                                     address.includes('Puerto Plata')) &&
+                                    // Excluir líneas que contengan información extra
+                                    !address.includes('Teléfonos:') &&
+                                    !address.includes('Cédula:') &&
+                                    !address.includes('POS:') &&
+                                    !address.includes('ORDEN #:') &&
+                                    !foundValues.includes(address)) {
+                                    foundValues.push(address);
+                                }
+                            }
+                        });
+                        break;
+                        
+                    default:
+                        // Búsqueda genérica para cualquier campo
+                        const genericPattern = new RegExp(`${fieldName}[:\s]*([^\\n]+)`, 'gi');
+                        const genericMatches = text.match(genericPattern);
+                        if (genericMatches) {
+                            genericMatches.forEach(match => {
+                                const valueMatch = match.replace(new RegExp(`^${fieldName}[:\s]*`, 'gi'), '').trim();
+                                if (valueMatch && !foundValues.includes(valueMatch)) {
+                                    foundValues.push(valueMatch);
+                                }
+                            });
+                        }
+                        break;
+                }
+                
+                // Agregar los valores encontrados a los datos estructurados
+                foundValues.forEach(value => {
+                    structuredData.push({ 
+                        label: field.charAt(0).toUpperCase() + field.slice(1), 
+                        value: value 
+                    });
+                });
+                
+                // Eliminar duplicados y valores muy similares
+                const uniqueValues = [];
+                foundValues.forEach(value => {
+                    // Verificar si ya existe un valor muy similar
+                    const isDuplicate = uniqueValues.some(existing => 
+                        existing === value || 
+                        existing.includes(value) || 
+                        value.includes(existing)
+                    );
+                    
+                    if (!isDuplicate) {
+                        uniqueValues.push(value);
+                    }
+                });
+                
+                // Debug: mostrar resultados para cada campo
+                console.log(`✅ Campo "${field}": ${uniqueValues.length} valores únicos encontrados:`, uniqueValues);
+                
+                // Agregar los valores únicos a los datos estructurados
+                uniqueValues.forEach(value => {
+                    structuredData.push({ 
+                        label: field.charAt(0).toUpperCase() + field.slice(1), 
+                        value: value 
+                    });
+                });
+            });
+            
+            console.log('📊 Total de datos estructurados:', structuredData.length);
+            return structuredData;
+        }
+        
+        // Función para detectar datos estructurados en el texto
+        function detectStructuredData(text) {
+            const structuredData = [];
+            
+            if (!text) return structuredData;
+            
+            // Detectar números de orden (patrones comunes)
+            const orderPatterns = [
+                /(\d{10,})/g,  // Números de 10+ dígitos
+                /orden[:\s]*(\d+)/gi,  // "orden: 123456"
+                /order[:\s]*(\d+)/gi,  // "order: 123456"
+                /número[:\s]*(\d+)/gi,  // "número: 123456"
+                /number[:\s]*(\d+)/gi   // "number: 123456"
+            ];
+            
+            orderPatterns.forEach((pattern, index) => {
+                const matches = text.match(pattern);
+                if (matches) {
+                    matches.forEach(match => {
+                        let value = match;
+                        let label = 'Número de Orden';
+                        
+                        // Extraer solo el número si hay texto alrededor
+                        if (pattern.source.includes('\\d+')) {
+                            const numMatch = match.match(/\d+/);
+                            if (numMatch) {
+                                value = numMatch[0];
+                            }
+                        }
+                        
+                        // Evitar duplicados
+                        if (!structuredData.some(item => item.value === value)) {
+                            structuredData.push({ label, value });
+                        }
+                    });
+                }
+            });
+            
+            // Detectar emails
+            const emailPattern = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g;
+            const emails = text.match(emailPattern);
+            if (emails) {
+                emails.forEach(email => {
+                    if (!structuredData.some(item => item.value === email)) {
+                        structuredData.push({ label: 'Email', value: email });
+                    }
+                });
+            }
+            
+            // Detectar teléfonos
+            const phonePatterns = [
+                /(\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g,
+                /(\d{3}[-.\s]?\d{3}[-.\s]?\d{4})/g
+            ];
+            
+            phonePatterns.forEach(pattern => {
+                const phones = text.match(pattern);
+                if (phones) {
+                    phones.forEach(phone => {
+                        if (!structuredData.some(item => item.value === phone)) {
+                            structuredData.push({ label: 'Teléfono', value: phone });
+                        }
+                    });
+                }
+            });
+            
+            // Detectar precios
+            const pricePatterns = [
+                /\$(\d+(?:\.\d{2})?)/g,
+                /(\d+(?:\.\d{2})?\s*(?:USD|EUR|MXN|COP))/gi,
+                /precio[:\s]*(\$?\d+(?:\.\d{2})?)/gi,
+                /price[:\s]*(\$?\d+(?:\.\d{2})?)/gi
+            ];
+            
+            pricePatterns.forEach(pattern => {
+                const prices = text.match(pattern);
+                if (prices) {
+                    prices.forEach(price => {
+                        if (!structuredData.some(item => item.value === price)) {
+                            structuredData.push({ label: 'Precio', value: price });
+                        }
+                    });
+                }
+            });
+            
+            // Detectar fechas
+            const datePatterns = [
+                /(\d{1,2}\/\d{1,2}\/\d{4})/g,
+                /(\d{1,2}-\d{1,2}-\d{4})/g,
+                /(\d{4}-\d{1,2}-\d{1,2})/g,
+                /(\d{1,2}\s+de\s+(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\s+de\s+\d{4})/gi
+            ];
+            
+            datePatterns.forEach(pattern => {
+                const dates = text.match(pattern);
+                if (dates) {
+                    dates.forEach(date => {
+                        if (!structuredData.some(item => item.value === date)) {
+                            structuredData.push({ label: 'Fecha', value: date });
+                        }
+                    });
+                }
+            });
+            
+            // Detectar identificadores específicos
+            const idPatterns = [
+                /ID[:\s]*(\d+)/gi,
+                /identificador[:\s]*(\d+)/gi,
+                /código[:\s]*(\d+)/gi,
+                /code[:\s]*(\d+)/gi
+            ];
+            
+            idPatterns.forEach(pattern => {
+                const ids = text.match(pattern);
+                if (ids) {
+                    ids.forEach(id => {
+                        const numMatch = id.match(/\d+/);
+                        if (numMatch) {
+                            const value = numMatch[0];
+                            if (!structuredData.some(item => item.value === value)) {
+                                structuredData.push({ label: 'ID', value });
+                            }
+                        }
+                    });
+                }
+            });
+            
+            return structuredData;
+        }
+        
+        // Función para escanear y analizar el documento completo
+        function scanDocumentStructure(text) {
+            console.log('🔍 Iniciando escaneo completo del documento...');
+            
+            const analysis = {
+                isManifest: false,
+                manifestSection: null,
+                totalLines: 0,
+                orderCount: 0,
+                clientCount: 0,
+                phoneCount: 0,
+                addressCount: 0,
+                boxCount: 0,
+                structure: []
+            };
+            
+            // Dividir en líneas
+            const lines = text.split('\n').filter(line => line.trim() !== '');
+            analysis.totalLines = lines.length;
+            
+            console.log(`📄 Documento tiene ${analysis.totalLines} líneas`);
+            
+            // Buscar si es un manifiesto
+            const manifestMatch = text.match(/Manifiesto de Carga #\s*\d+/i);
+            if (manifestMatch) {
+                analysis.isManifest = true;
+                console.log('✅ Documento identificado como Manifiesto de Carga');
+                
+                // Extraer sección del manifiesto
+                const startIndex = text.indexOf(manifestMatch[0]);
+                analysis.manifestSection = text.substring(startIndex);
+                
+                // Analizar estructura del manifiesto
+                const manifestLines = analysis.manifestSection.split('\n').filter(line => line.trim() !== '');
+                
+                manifestLines.forEach((line, index) => {
+                    // Contar elementos
+                    if (line.match(/ORDEN #:\s*\d+/i)) analysis.orderCount++;
+                    if (line.match(/Cliente:\s*.+/i)) analysis.clientCount++;
+                    if (line.match(/Teléfonos:\s*.+/i)) analysis.phoneCount++;
+                    if (line.match(/Dirección:\s*.+/i)) analysis.addressCount++;
+                    if (line.match(/Cantidad de Cajas:\s*\d+/i)) analysis.boxCount++;
+                    
+                    // Guardar estructura
+                    if (line.match(/POS:\s*\d+/i)) {
+                        analysis.structure.push({
+                            type: 'position',
+                            line: index + 1,
+                            content: line.trim()
+                        });
+                    }
+                });
+                
+                console.log(`📊 Análisis del manifiesto:`);
+                console.log(`   - Órdenes encontradas: ${analysis.orderCount}`);
+                console.log(`   - Clientes encontrados: ${analysis.clientCount}`);
+                console.log(`   - Teléfonos encontrados: ${analysis.phoneCount}`);
+                console.log(`   - Direcciones encontradas: ${analysis.addressCount}`);
+                console.log(`   - Cantidades de cajas: ${analysis.boxCount}`);
+            } else {
+                console.log('❌ No es un manifiesto de carga');
+            }
+            
+            return analysis;
+        }
+        
+        // Función para extraer solo la sección del Manifiesto de Carga
+        function extractManifestSection(text) {
+            // Buscar el inicio del manifiesto
+            const manifestStart = text.match(/Manifiesto de Carga #\s*\d+/i);
+            if (!manifestStart) {
+                return null;
+            }
+            
+            // Encontrar el índice de inicio
+            const startIndex = text.indexOf(manifestStart[0]);
+            if (startIndex === -1) {
+                return null;
+            }
+            
+            // Extraer desde el inicio del manifiesto hasta el final del documento
+            const manifestSection = text.substring(startIndex);
+            
+            console.log('📋 Sección del Manifiesto extraída:', manifestSection.substring(0, 500) + '...');
+            
+            return manifestSection;
+        }
+        
+        // Función específica para extraer datos de manifestos de carga
+        function extractManifestData(text, userFields) {
+            const structuredData = [];
+            
+            console.log('📦 Iniciando extracción específica para manifesto de carga');
+            
+            // Normalizar campos solicitados
+            const normalizedFields = userFields.map(field => field.trim().toLowerCase());
+            console.log('🔍 Campos a extraer:', normalizedFields);
+            
+            // Dividir el texto en líneas y filtrar líneas vacías
+            const lines = text.split('\n').filter(line => line.trim() !== '');
+            
+            // Solo procesar los campos solicitados
+            normalizedFields.forEach(fieldName => {
+                const extractedData = extractFieldFromManifest(lines, fieldName);
+                if (extractedData && extractedData.length > 0) {
+                    structuredData.push({
+                        field: fieldName,
+                        values: extractedData
+                    });
+                }
+            });
+            
+            return structuredData;
+        }
+        
+        // Función para extraer datos específicos de un campo del manifiesto
+        function extractFieldFromManifest(lines, fieldName) {
+            const foundValues = [];
+            
+            switch (fieldName) {
+                case 'número de orden':
+                case 'numero de orden':
+                case 'order':
+                case 'orden':
+                case 'no. de orden':
+                case 'no de orden':
+                    // Buscar números de orden con el formato exacto "No. de Orden: XXXXXXXXXX"
+                    lines.forEach((line, index) => {
+                        // Patrones específicos para el formato exacto
+                        const orderPatterns = [
+                            /Orden\s*:\s*(\d+)/i,             // "Orden: 6000187216"
+                            /No\.\s*de\s*Orden\s*:\s*(\d+)/i, // "No. de Orden: 6000187216"
+                            /Orden\s*#\s*(\d+)/i,             // "Orden #6000187216"
+                            /^Orden[:\s]+(\d+)/im             // "Orden" al inicio de línea
+                        ];
+                        
+                        orderPatterns.forEach(pattern => {
+                            const matches = line.match(pattern);
+                            if (matches && matches[1]) {
+                                const value = matches[1].trim();
+                                // Validar que sea un número de orden válido (6-12 dígitos)
+                                if (value.length >= 6 && 
+                                    value.length <= 12 && 
+                                    !foundValues.includes(value)) {
+                                    foundValues.push(value);
+                                    console.log(`✅ Orden encontrado en línea ${index + 1}: ${value}`);
+                                }
+                            }
+                        });
+                    });
+                    break;
+                    
+                case 'cantidad de cajas':
+                case 'cajas':
+                case 'boxes':
+                    // Buscar cantidades de cajas en resúmenes específicos del manifiesto
+                    lines.forEach((line, index) => {
+                        // Buscar patrones que indiquen cantidad total en el resumen
+                        const quantityPatterns = [
+                            /(\d+)\s+undefined/gi,  // Patrón específico observado en el PDF
+                            /Total.*?(\d+)/gi,      // Cualquier línea que diga "Total" seguido de número
+                            /Cantidad.*?(\d+)/gi    // Líneas con "Cantidad"
+                        ];
+                        
+                        quantityPatterns.forEach(pattern => {
+                            const matches = line.match(pattern);
+                            if (matches) {
+                                matches.forEach(match => {
+                                    const numMatch = match.match(/\d+/);
+                                    if (numMatch) {
+                                        const value = parseInt(numMatch[0]);
+                                        // Solo números razonables para cajas (1-100) y evitar números que parezcan órdenes
+                                        if (value >= 1 && value <= 100 && 
+                                            !value.toString().startsWith('8600') &&  // No confundir con números de orden
+                                            !foundValues.includes(value.toString())) {
+                                            foundValues.push(value.toString());
+                                            console.log(`✅ Cantidad encontrada en línea ${index + 1}: ${value}`);
+                                        }
+                                    }
+                                });
+                            }
+                        });
+                    });
+                    break;
+                        
+                case 'nombre del cliente':
+                case 'cliente':
+                case 'customer':
+                case 'client':
+                        // Buscar nombres de clientes específicos del manifiesto
+                        lines.forEach((line, index) => {
+                            // Buscar exactamente "Cliente:" seguido del nombre
+                            const namePatterns = [
+                                /Cliente:\s*([A-Za-zÁáÉéÍíÓóÚúÑñ\s\.]+?)(?=\s+Dirección|$)/gi
+                            ];
+                            
+                            namePatterns.forEach(pattern => {
+                                const matches = line.match(pattern);
+                                if (matches) {
+                                    matches.forEach(match => {
+                                        const nameMatch = match.replace(/^Cliente:\s*/gi, '').trim();
+                                        // Solo tomar nombres válidos, sin información extra
+                                        if (nameMatch && 
+                                            nameMatch.length >= 3 && 
+                                            nameMatch.length <= 50 &&
+                                            !nameMatch.includes('Teléfonos') &&
+                                            !nameMatch.includes('Dirección') &&
+                                            !nameMatch.includes('Cédula') &&
+                                            !nameMatch.includes('POS') &&
+                                            !nameMatch.includes(':') &&
+                                            !foundValues.includes(nameMatch)) {
+                                            foundValues.push(nameMatch);
+                                            console.log(`✅ Cliente encontrado en línea ${index + 1}: ${nameMatch}`);
+                                        }
+                                    });
+                                }
+                            });
+                        });
+                        break;
+                        
+                case 'número de teléfono':
+                case 'teléfono':
+                case 'phone':
+                    // Buscar números de teléfono específicos del manifiesto
+                    lines.forEach((line, index) => {
+                        // Buscar exactamente "Teléfonos:" seguido de números
+                        const phonePatterns = [
+                            /Teléfonos:\s*(\d{3}[-.\s]?\d{3}[-.\s]?\d{4})/gi,
+                            /Teléfonos:\s*(\d{10})/gi
+                        ];
+                        
+                        phonePatterns.forEach(pattern => {
+                            const matches = line.match(pattern);
+                            if (matches) {
+                                matches.forEach(match => {
+                                    // Extraer solo números después de "Teléfonos:"
+                                    const phoneMatch = match.replace(/Teléfonos:\s*/gi, '').replace(/[^\d]/g, '');
+                                    if (phoneMatch.length === 10 && 
+                                        (phoneMatch.startsWith('809') || 
+                                         phoneMatch.startsWith('829') ||
+                                         phoneMatch.startsWith('849')) &&
+                                        !foundValues.includes(phoneMatch)) {
+                                        foundValues.push(phoneMatch);
+                                        console.log(`✅ Teléfono encontrado en línea ${index + 1}: ${phoneMatch}`);
+                                    }
+                                });
+                            }
+                        });
+                    });
+                    break;
+                    
+                case 'dirección':
+                case 'address':
+                        // Buscar direcciones específicas del manifiesto
+                        lines.forEach((line, index) => {
+                            // Buscar exactamente "Dirección:" seguido de la dirección completa
+                            const addressPatterns = [
+                                /Dirección:\s*([^Teléfonos]+?)(?=\s*Teléfonos|$)/gi
+                            ];
+                            
+                            addressPatterns.forEach(pattern => {
+                                const matches = line.match(pattern);
+                                if (matches) {
+                                    matches.forEach(match => {
+                                        const addressMatch = match.replace(/^Dirección:\s*/gi, '').trim();
+                                        // Solo tomar direcciones válidas
+                                        if (addressMatch && 
+                                            addressMatch.length >= 10 && 
+                                            addressMatch.length <= 150 &&
+                                            !addressMatch.includes('Teléfonos') &&
+                                            !addressMatch.includes('Cédula') &&
+                                            !addressMatch.includes('POS') &&
+                                            !foundValues.includes(addressMatch)) {
+                                            foundValues.push(addressMatch);
+                                            console.log(`✅ Dirección encontrada en línea ${index + 1}: ${addressMatch}`);
+                                        }
+                                    });
+                                }
+                            });
+                        });
+                        break;
+                        
+                    default:
+                        // Solo procesar campos específicos de manifestos - no hacer búsqueda genérica
+                        console.log(`⚠️ Campo "${fieldName}" no reconocido para manifesto. Solo se procesan: número de orden, cantidad de cajas, nombre del cliente, número de teléfono, dirección`);
+                        break;
+                }
+                
+                // Eliminar duplicados
+                const uniqueValues = [];
+                foundValues.forEach(value => {
+                    const isDuplicate = uniqueValues.some(existing => 
+                        existing === value || 
+                        existing.includes(value) || 
+                        value.includes(existing)
+                    );
+                    
+                    if (!isDuplicate) {
+                        uniqueValues.push(value);
+                    }
+                });
+                
+                console.log(`✅ Campo "${fieldName}": ${uniqueValues.length} valores únicos encontrados:`, uniqueValues);
+                
+                return uniqueValues;
+        }
+        
+        // Función para exportar resultados
+        async function exportResults(fileName, format, structuredData, fullText) {
+            try {
+                // Decodificar datos de base64
+                let parsedStructuredData = [];
+                let decodedFullText = '';
+                
+                try {
+                    parsedStructuredData = JSON.parse(safeBase64Decode(structuredData));
+                    decodedFullText = safeBase64Decode(fullText);
+                } catch (e) {
+                    console.error('Error decoding data:', e);
+                    return;
+                }
+                
+                const response = await fetch('/api/export', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        fileName: fileName,
+                        format: format,
+                        structuredData: parsedStructuredData,
+                        fullText: decodedFullText
+                    })
+                });
+
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    // Mapear formatos a extensiones correctas
+                    const extensionMap = {
+                        'excel': 'xlsx',
+                        'word': 'docx',
+                        'pdf': 'pdf'
+                    };
+                    const fileExtension = extensionMap[format] || format;
+                    a.download = `Resultados_Extraccion.${fileExtension}`;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    
+                    // Mostrar notificación de éxito
+                    const notification = document.createElement('div');
+                    notification.className = 'copy-notification';
+                    notification.textContent = `✅ Archivo ${format.toUpperCase()} exportado exitosamente`;
+                    document.body.appendChild(notification);
+                    
+                    setTimeout(() => {
+                        notification.remove();
+                    }, 3000);
+                } else {
+                    throw new Error('Error en la exportación');
+                }
+            } catch (error) {
+                console.error('Error al exportar:', error);
+                alert('Error al exportar el archivo. Intenta de nuevo.');
+            }
+        }
+        
+        // Drag and drop
+        const uploadSection = document.querySelector('.upload-section');
+        
+        uploadSection.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadSection.style.borderColor = '#667eea';
+            uploadSection.style.background = '#f0f2ff';
+        });
+
+        uploadSection.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            uploadSection.style.borderColor = '#dee2e6';
+            uploadSection.style.background = '#f8f9fa';
+        });
+
+        uploadSection.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadSection.style.borderColor = '#dee2e6';
+            uploadSection.style.background = '#f8f9fa';
+            
+            const files = Array.from(e.dataTransfer.files);
+            selectedFiles = selectedFiles.concat(files);
+            updateFileList();
+            updateExtractButton();
+        });
+    </script>
+</body>
+</html> 
