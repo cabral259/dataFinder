@@ -131,10 +131,26 @@
             background: #dc3545;
             color: white;
             border: none;
-            padding: 5px 10px;
-            border-radius: 5px;
+            padding: 8px 12px;
+            border-radius: 50%;
             cursor: pointer;
-            font-size: 0.8em;
+            font-size: 1em;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+        }
+
+        .file-item .remove-btn:hover {
+            background: #c82333;
+            transform: scale(1.1);
+        }
+
+        .remove-icon {
+            font-weight: bold;
+            font-size: 1.2em;
         }
 
         .results-section {
@@ -644,31 +660,18 @@
                         <h4>¿Qué quieres extraer?</h4>
                         <div class="option-group">
                             <label class="radio-label">
-                                <input type="radio" name="extractionType" value="all" checked>
-                                <span>Todo el contenido</span>
-                            </label>
-                            <label class="radio-label">
-                                <input type="radio" name="extractionType" value="specific">
-                                <span>Solo campos específicos</span>
-                            </label>
-                            <label class="radio-label">
-                                <input type="radio" name="extractionType" value="smart">
+                                <input type="radio" name="extractionType" value="smart" checked>
                                 <span>Extracción Inteligente</span>
                             </label>
-
                         </div>
                         
                         <div id="specificFields" class="specific-fields" style="display: none;">
                             <textarea 
                                 id="fieldInput" 
-                                placeholder="Escribe los campos que quieres extraer, uno por línea. Ejemplos:&#10;número de orden&#10;cantidad de cajas&#10;nombre del cliente&#10;número de teléfono&#10;dirección&#10;id de carga&#10;id del envío&#10;&#10;Nota: Para manifestos de carga, usa estos campos específicos&#10;El sistema detectará automáticamente el tipo de documento&#10;&#10;Con Extracción Inteligente: Usa Gemini AI para extracción precisa"
+                                placeholder="Escribe los campos para extraer:"
                                 rows="8"
                                 disabled
                             ></textarea>
-                            <p class="help-text">
-                                <strong>Para Excel:</strong> Nombres de columnas<br>
-                                <strong>Para PDF/Word:</strong> Palabras clave o frases
-                            </p>
                         </div>
                     </div>
                     
@@ -678,12 +681,7 @@
                 <div id="fileList" class="file-list"></div>
             </div>
 
-            <div class="supported-formats">
-                <h4>Formatos Soportados:</h4>
-                <span class="format-badge">PDF (.pdf)</span>
-                <span class="format-badge">Excel (.xlsx, .xls)</span>
-                <span class="format-badge">Word (.docx, .doc)</span>
-            </div>
+
 
             <div id="loading" class="loading" style="display: none;">
                 <div class="spinner"></div>
@@ -720,22 +718,9 @@
             updateExtractButton();
         });
 
-        // Manejar opciones de extracción
-        document.querySelectorAll('input[name="extractionType"]').forEach(radio => {
-            radio.addEventListener('change', (e) => {
-                console.log('🎯 Opción de extracción cambiada:', e.target.value);
-                if (e.target.value === 'specific' || e.target.value === 'smart') {
-                    specificFields.style.display = 'block';
-                    fieldInput.disabled = false;
-                    fieldInput.focus();
-                    console.log('✅ Campos específicos habilitados');
-                } else {
-                    specificFields.style.display = 'none';
-                    fieldInput.disabled = true;
-                    console.log('❌ Campos específicos deshabilitados');
-                }
-            });
-        });
+        // Configurar campos específicos por defecto (Extracción Inteligente)
+        specificFields.style.display = 'block';
+        fieldInput.disabled = false;
 
         // Actualizar lista de archivos
         function updateFileList() {
@@ -750,7 +735,8 @@
                 
                 const removeBtn = document.createElement('button');
                 removeBtn.className = 'remove-btn';
-                removeBtn.textContent = '❌';
+                removeBtn.innerHTML = '<span class="remove-icon">✕</span>';
+                removeBtn.title = 'Eliminar archivo';
                 removeBtn.onclick = () => removeFile(index);
                 
                 fileItem.appendChild(fileName);
@@ -764,6 +750,12 @@
             selectedFiles.splice(index, 1);
             updateFileList();
             updateExtractButton();
+            
+            // Limpiar mensajes de éxito y resultados al eliminar archivo
+            const results = document.getElementById('results');
+            const stats = document.getElementById('stats');
+            results.innerHTML = '';
+            stats.style.display = 'none';
         }
 
         // Actualizar botón de extracción
@@ -833,7 +825,8 @@
                         displayResults(data.results);
                     }
                     
-                    if (data.stats) {
+                    // Solo mostrar estadísticas si NO es extracción inteligente con descarga automática
+                    if (data.stats && !(extractionType === 'smart' && data.results && data.results.length > 0 && data.results[0].structuredData && data.results[0].structuredData.length > 0)) {
                         displayStats(data.stats);
                     }
                 } else {
