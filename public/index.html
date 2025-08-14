@@ -98,6 +98,9 @@
             cursor: pointer;
             transition: all 0.3s ease;
             margin-top: 20px;
+            display: block;
+            margin-left: auto;
+            margin-right: auto;
         }
 
         .extract-btn:hover {
@@ -547,7 +550,8 @@
             background: #e9ecef;
         }
 
-        .radio-label input[type="radio"] {
+        .radio-label input[type="radio"],
+        .radio-label input[type="checkbox"] {
             margin-right: 10px;
             transform: scale(1.2);
         }
@@ -557,12 +561,26 @@
             color: #333;
         }
 
+        .field-options {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .field-options h5 {
+            margin-bottom: 10px;
+            color: #333;
+            font-size: 1em;
+        }
+
         .specific-fields {
-            margin-top: 15px;
-            padding: 15px;
-            background: white;
-            border-radius: 8px;
-            border: 1px solid #dee2e6;
+            margin-top: 20px;
+            margin-bottom: 20px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 15px;
+            border: 2px solid #dee2e6;
         }
 
         #fieldInput {
@@ -656,24 +674,37 @@
                     
                     <br>
                     
-                    <div class="extraction-options">
-                        <h4>¿Qué quieres extraer?</h4>
-                        <div class="option-group">
-                            <label class="radio-label">
-                                <input type="radio" name="extractionType" value="smart" checked>
-                                <span>Extracción Inteligente</span>
-                            </label>
+                </div>
+
+                                        <div id="specificFields" class="specific-fields" style="display: block;">
+                            <h5>Selecciona los campos a extraer:</h5>
+                            <div class="field-options">
+                                <label class="radio-label">
+                                    <input type="checkbox" id="orderNumber" value="Número de orden">
+                                    <span>Número de orden</span>
+                                </label>
+                                <label class="radio-label">
+                                    <input type="checkbox" id="loadId" value="ID de carga">
+                                    <span>ID de carga</span>
+                                </label>
+                                <label class="radio-label">
+                                    <input type="checkbox" id="shipmentId" value="ID del envío">
+                                    <span>ID del envío</span>
+                                </label>
+                                <label class="radio-label">
+                                    <input type="checkbox" id="articleCode" value="Código artículo">
+                                    <span>Código artículo</span>
+                                </label>
+                                <label class="radio-label">
+                                    <input type="checkbox" id="articleName" value="Nombre de artículo">
+                                    <span>Nombre de artículo</span>
+                                </label>
+                                <label class="radio-label">
+                                    <input type="checkbox" id="quantity" value="Cantidad">
+                                    <span>Cantidad</span>
+                                </label>
+                            </div>
                         </div>
-                        
-                        <div id="specificFields" class="specific-fields" style="display: none;">
-                            <textarea 
-                                id="fieldInput" 
-                                placeholder="Escribe los campos para extraer:"
-                                rows="8"
-                                disabled
-                            ></textarea>
-                        </div>
-                    </div>
                     
                     <button id="extractBtn" class="extract-btn" disabled>Extraer Datos</button>
                 </div>
@@ -720,7 +751,14 @@
 
         // Configurar campos específicos por defecto (Extracción Inteligente)
         specificFields.style.display = 'block';
-        fieldInput.disabled = false;
+        
+        // Los checkboxes empiezan desmarcados por defecto
+        document.getElementById('orderNumber').checked = false;
+        document.getElementById('loadId').checked = false;
+        document.getElementById('shipmentId').checked = false;
+        document.getElementById('articleCode').checked = false;
+        document.getElementById('articleName').checked = false;
+        document.getElementById('quantity').checked = false;
 
         // Actualizar lista de archivos
         function updateFileList() {
@@ -775,6 +813,21 @@
         // Extraer datos
         extractBtn.addEventListener('click', async () => {
             if (selectedFiles.length === 0) return;
+            
+            // Obtener referencias a los checkboxes
+            const orderNumberCheckbox = document.getElementById('orderNumber');
+            const loadIdCheckbox = document.getElementById('loadId');
+            const shipmentIdCheckbox = document.getElementById('shipmentId');
+            const articleCodeCheckbox = document.getElementById('articleCode');
+            const articleNameCheckbox = document.getElementById('articleName');
+            const quantityCheckbox = document.getElementById('quantity');
+            
+            // Validar que al menos un campo esté seleccionado
+            if (!orderNumberCheckbox.checked && !loadIdCheckbox.checked && !shipmentIdCheckbox.checked && 
+                !articleCodeCheckbox.checked && !articleNameCheckbox.checked && !quantityCheckbox.checked) {
+                alert('⚠️ Por favor selecciona al menos un campo para extraer.');
+                return;
+            }
 
             // Mostrar loading
             loading.style.display = 'block';
@@ -786,20 +839,35 @@
                 formData.append('files', file);
             });
 
-            // Agregar opciones de extracción
-            const extractionType = document.querySelector('input[name="extractionType"]:checked').value;
-            formData.append('extractionType', extractionType);
+            // Agregar opciones de extracción (siempre inteligente)
+            formData.append('extractionType', 'smart');
             
-            if (extractionType === 'specific') {
-                const fields = fieldInput.value.split('\n').filter(field => field.trim() !== '');
-                formData.append('specificFields', JSON.stringify(fields));
-            } else if (extractionType === 'smart') {
-                const fields = fieldInput.value.split('\n').filter(field => field.trim() !== '');
-                formData.append('fields', JSON.stringify(fields));
+            // Obtener campos seleccionados de los checkboxes
+            const selectedFields = [];
+            
+            if (orderNumberCheckbox.checked) {
+                selectedFields.push('Número de orden');
             }
+            if (loadIdCheckbox.checked) {
+                selectedFields.push('ID de carga');
+            }
+            if (shipmentIdCheckbox.checked) {
+                selectedFields.push('ID del envío');
+            }
+            if (articleCodeCheckbox.checked) {
+                selectedFields.push('Código artículo');
+            }
+            if (articleNameCheckbox.checked) {
+                selectedFields.push('Nombre de artículo');
+            }
+            if (quantityCheckbox.checked) {
+                selectedFields.push('Cantidad');
+            }
+            
+            formData.append('fields', JSON.stringify(selectedFields));
 
             try {
-                const apiEndpoint = extractionType === 'smart' ? '/api/extract-ai' : '/api/extract';
+                const apiEndpoint = '/api/extract-ai';
                 const response = await fetch(apiEndpoint, {
                     method: 'POST',
                     body: formData
@@ -809,8 +877,7 @@
 
                 if (data.success) {
                     // Si es extracción inteligente, descargar automáticamente
-                    const extractionType = document.querySelector('input[name="extractionType"]:checked').value;
-                    if (extractionType === 'smart' && data.results && data.results.length > 0) {
+                    if (data.results && data.results.length > 0) {
                         const result = data.results[0];
                         if (result.structuredData && result.structuredData.length > 0) {
                             // Descargar automáticamente como Excel
@@ -826,7 +893,7 @@
                     }
                     
                     // Solo mostrar estadísticas si NO es extracción inteligente con descarga automática
-                    if (data.stats && !(extractionType === 'smart' && data.results && data.results.length > 0 && data.results[0].structuredData && data.results[0].structuredData.length > 0)) {
+                    if (data.stats && !(data.results && data.results.length > 0 && data.results[0].structuredData && data.results[0].structuredData.length > 0)) {
                         displayStats(data.stats);
                     }
                 } else {
@@ -949,25 +1016,41 @@
                         const text = result.data.text || '';
                         
                         // Intentar detectar datos estructurados y mostrarlos en tabla
-                        const extractionType = document.querySelector('input[name="extractionType"]:checked').value;
                         let structuredData = [];
                         
-                        if (extractionType === 'specific') {
-                            // Usar los campos específicos definidos por el usuario
-                            const userFields = fieldInput.value.split('\n').filter(field => field.trim() !== '');
-                            structuredData = extractSpecificFields(text, userFields);
-                        } else if (extractionType === 'smart') {
-                            // Para extracción inteligente, usar los datos que ya vienen estructurados
-                            if (result.structuredData && Array.isArray(result.structuredData)) {
-                                structuredData = result.structuredData;
-                            } else {
-                                // Fallback a extracción manual
-                                const userFields = fieldInput.value.split('\n').filter(field => field.trim() !== '');
-                                structuredData = extractSpecificFields(text, userFields);
-                            }
+                        // Para extracción inteligente, usar los datos que ya vienen estructurados
+                        if (result.structuredData && Array.isArray(result.structuredData)) {
+                            structuredData = result.structuredData;
                         } else {
-                            // Detección automática para "todo el contenido"
-                            structuredData = detectStructuredData(text);
+                            // Fallback a extracción manual usando checkboxes
+                            const selectedFields = [];
+                            const orderNumberCheckbox = document.getElementById('orderNumber');
+                            const loadIdCheckbox = document.getElementById('loadId');
+                            const shipmentIdCheckbox = document.getElementById('shipmentId');
+                            const articleCodeCheckbox = document.getElementById('articleCode');
+                            const articleNameCheckbox = document.getElementById('articleName');
+                            const quantityCheckbox = document.getElementById('quantity');
+                            
+                            if (orderNumberCheckbox.checked) {
+                                selectedFields.push('Número de orden');
+                            }
+                            if (loadIdCheckbox.checked) {
+                                selectedFields.push('ID de carga');
+                            }
+                            if (shipmentIdCheckbox.checked) {
+                                selectedFields.push('ID del envío');
+                            }
+                            if (articleCodeCheckbox.checked) {
+                                selectedFields.push('Código artículo');
+                            }
+                            if (articleNameCheckbox.checked) {
+                                selectedFields.push('Nombre de artículo');
+                            }
+                            if (quantityCheckbox.checked) {
+                                selectedFields.push('Cantidad');
+                            }
+                            
+                            structuredData = extractSpecificFields(text, selectedFields);
                         }
                         
                         // Asegurarnos de que los datos estén en el formato correcto para mostrar y exportar

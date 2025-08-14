@@ -107,12 +107,28 @@ async function extractWithAI(text, requestedFields) {
             ]
         }
         
-        Reglas importantes:
+        Reglas CRÍTICAS Y OBLIGATORIAS:
         1. Extrae SOLO los campos solicitados
         2. Si no encuentras un campo, no lo incluyas
         3. Mantén el formato exacto del valor encontrado
-        4. Si hay múltiples valores del mismo campo, incluye todos
-        5. Responde SOLO con el JSON, sin texto adicional
+        4. Para números de orden, incluye SOLO valores únicos (sin duplicados)
+        5. Para ID de carga, incluye todos los valores encontrados (pueden repetirse)
+        6. Para CANTIDADES, es OBLIGATORIO extraer CADA instancia individual:
+           - Si ves "15 UND" tres veces en el documento, incluye "15 UND" tres veces
+           - Si ves "200 UND" dos veces, incluye "200 UND" dos veces
+           - NO agrupes cantidades iguales, incluye cada una por separado
+           - Esto es esencial para capturar todas las entradas del documento
+        7. Para otros campos, si hay múltiples valores diferentes, incluye todos
+        8. Responde SOLO con el JSON, sin texto adicional
+        
+        REGLA MÁS IMPORTANTE: 
+        - DEBES extraer TODOS los artículos que encuentres en el documento
+        - NO omitas ningún artículo, por más que parezcan similares
+        - Si una orden tiene 18 artículos, extrae los 18 artículos
+        - Si una orden tiene 11 artículos, extrae los 11 artículos
+        - NO hagas resúmenes, extrae CADA artículo individual
+        
+        IMPORTANTE: Para cantidades, extrae CADA entrada individual que veas en el documento, incluso si son repetidas.
         `;
         
         console.log('🤖 Enviando prompt a Gemini...');
@@ -168,19 +184,25 @@ function extractFieldsManually(text, requestedFields) {
                 /(?:Número de orden|Order):\s*([A-Z0-9\-]+)/gi
             ];
             
+            const seenOrderNumbers = new Set();
+            
             orderPatterns.forEach(pattern => {
                 const matches = text.match(pattern);
                 if (matches) {
                     matches.forEach(match => {
-                        results.push({ nombre: field, valor: match.trim() });
-                        console.log(`✅ Encontrado orden: ${match.trim()}`);
+                        const cleanMatch = match.trim();
+                        if (!seenOrderNumbers.has(cleanMatch)) {
+                            seenOrderNumbers.add(cleanMatch);
+                            results.push({ nombre: field, valor: cleanMatch });
+                            console.log(`✅ Encontrado orden único: ${cleanMatch}`);
+                        }
                     });
                 }
             });
         }
         
         if (fieldLower.includes('carga') || fieldLower.includes('load')) {
-            // Buscar IDs de carga
+            // Buscar IDs de carga (sin eliminar duplicados)
             const loadPatterns = [
                 /CG-\d+/gi,
                 /(?:ID de carga|Load ID):\s*([A-Z0-9\-]+)/gi
@@ -210,6 +232,60 @@ function extractFieldsManually(text, requestedFields) {
                     matches.forEach(match => {
                         results.push({ nombre: field, valor: match.trim() });
                         console.log(`✅ Encontrado ID de envío: ${match.trim()}`);
+                    });
+                }
+            });
+        }
+        
+        if (fieldLower.includes('código artículo') || fieldLower.includes('codigo articulo') || fieldLower.includes('article code')) {
+            // Buscar códigos de artículo (formato Pxxxx)
+            const articleCodePatterns = [
+                /P\d{4,}/gi,
+                /(?:Código de artículo|Article Code):\s*([A-Z0-9\-]+)/gi
+            ];
+            
+            articleCodePatterns.forEach(pattern => {
+                const matches = text.match(pattern);
+                if (matches) {
+                    matches.forEach(match => {
+                        results.push({ nombre: field, valor: match.trim() });
+                        console.log(`✅ Encontrado código de artículo: ${match.trim()}`);
+                    });
+                }
+            });
+        }
+        
+        if (fieldLower.includes('nombre de artículo') || fieldLower.includes('nombre de articulo') || fieldLower.includes('article name')) {
+            // Buscar nombres de artículos
+            const articleNamePatterns = [
+                /(?:Nombre de artículo|Article Name):\s*([^\n]+)/gi,
+                /(?:TUBOS|TUBO)\s+[A-Z\s]+/gi
+            ];
+            
+            articleNamePatterns.forEach(pattern => {
+                const matches = text.match(pattern);
+                if (matches) {
+                    matches.forEach(match => {
+                        results.push({ nombre: field, valor: match.trim() });
+                        console.log(`✅ Encontrado nombre de artículo: ${match.trim()}`);
+                    });
+                }
+            });
+        }
+        
+        if (fieldLower.includes('cantidad')) {
+            // Buscar cantidades
+            const quantityPatterns = [
+                /\d+\s+(?:UND|UNIDADES|PCS|PIEZAS)/gi,
+                /(?:Cantidad|Quantity):\s*(\d+)/gi
+            ];
+            
+            quantityPatterns.forEach(pattern => {
+                const matches = text.match(pattern);
+                if (matches) {
+                    matches.forEach(match => {
+                        results.push({ nombre: field, valor: match.trim() });
+                        console.log(`✅ Encontrado cantidad: ${match.trim()}`);
                     });
                 }
             });
@@ -345,11 +421,32 @@ app.post('/api/extract-ai', upload.array('files'), async (req, res) => {
             }
         });
         
-        // Formatear resultados
-        const structuredData = extractedFields.map(field => ({
-            label: field.nombre,
-            value: field.valor
-        }));
+        // Formatear resultados y eliminar duplicados de números de orden
+        const structuredData = [];
+        const seenOrderNumbers = new Set();
+        
+        extractedFields.forEach(field => {
+            const isOrderNumber = field.nombre.toLowerCase().includes('número de orden') || 
+                                 field.nombre.toLowerCase().includes('numero de orden') ||
+                                 field.nombre.toLowerCase().includes('order number');
+            
+            if (isOrderNumber) {
+                // Para números de orden, verificar duplicados
+                if (!seenOrderNumbers.has(field.valor)) {
+                    seenOrderNumbers.add(field.valor);
+                    structuredData.push({
+                        label: field.nombre,
+                        value: field.valor
+                    });
+                }
+            } else {
+                // Para otras categorías, agregar normalmente
+                structuredData.push({
+                    label: field.nombre,
+                    value: field.valor
+                });
+            }
+        });
         
         res.json({
             success: true,
@@ -648,39 +745,197 @@ async function generateWord(fileName, structuredData, fullText) {
 
 // Generar Excel
 async function generateExcel(fileName, structuredData, fullText) {
+    console.log('📊 Generando Excel con datos:', JSON.stringify(structuredData, null, 2));
     const workbook = XLSX.utils.book_new();
     
-    // Agrupar datos por categoría
+    // Agrupar datos por categoría y eliminar duplicados
     const groupedData = {};
     if (structuredData && structuredData.length > 0) {
         structuredData.forEach(item => {
-            if (!groupedData[item.label]) {
-                groupedData[item.label] = [];
+            // Verificar si el item tiene la estructura correcta
+            const label = item.label || item.nombre || '';
+            const value = item.value || item.valor || '';
+            
+            if (!groupedData[label]) {
+                groupedData[label] = [];
             }
-            groupedData[item.label].push(item.value);
+            
+            // Para números de orden, verificar si ya existe antes de agregar
+            if (label.toLowerCase().includes('número de orden') || 
+                label.toLowerCase().includes('numero de orden') ||
+                label.toLowerCase().includes('order number')) {
+                // Solo agregar si no existe ya
+                if (!groupedData[label].includes(value)) {
+                    groupedData[label].push(value);
+                }
+            } else {
+                // Para otras categorías (incluyendo ID de carga), agregar normalmente
+                groupedData[label].push(value);
+            }
         });
     }
     
-    // Crear hojas separadas para cada categoría
-    Object.keys(groupedData).forEach(category => {
-        const categoryData = groupedData[category];
-        const worksheetData = [
-            [`${category} - Total: ${categoryData.length}`],
-            [''],
-            ['#', 'Valor'],
-            ...categoryData.map((value, index) => [index + 1, value])
-        ];
+    // Crear tabla horizontal con columnas separadas
+    const allData = [];
+    
+        // Crear registros basados en la estructura de datos extraídos
+    const records = [];
+    const loadId = groupedData['ID de carga']?.[0] || '';
+    
+    if (structuredData && structuredData.length > 0) {
+        // Procesar los datos secuencialmente para mantener las relaciones exactas
+        let currentOrder = '';
+        let currentShipment = '';
+        let currentArticleCode = '';
+        let currentArticleName = '';
+        let currentQuantities = [];
         
-        const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+        for (let i = 0; i < structuredData.length; i++) {
+            const item = structuredData[i];
+            const label = item.label || item.nombre || '';
+            const value = item.value || item.valor || '';
+            
+            if (label.toLowerCase().includes('número de orden') || label.toLowerCase().includes('numero de orden')) {
+                // Si tenemos datos acumulados, crear registros
+                if (currentOrder && currentShipment && currentArticleCode) {
+                    if (currentQuantities.length === 0) {
+                        records.push({
+                            loadId: loadId,
+                            shipmentId: currentShipment,
+                            orderNumber: currentOrder,
+                            articleCode: currentArticleCode,
+                            articleName: currentArticleName,
+                            quantity: ''
+                        });
+                    } else {
+                        // Crear un registro por cada cantidad
+                        for (const quantity of currentQuantities) {
+                            records.push({
+                                loadId: loadId,
+                                shipmentId: currentShipment,
+                                orderNumber: currentOrder,
+                                articleCode: currentArticleCode,
+                                articleName: currentArticleName,
+                                quantity: quantity
+                            });
+                        }
+                    }
+                }
+                
+                // Iniciar nuevo registro
+                currentOrder = value;
+                currentShipment = '';
+                currentArticleCode = '';
+                currentArticleName = '';
+                currentQuantities = [];
+                
+            } else if (label.toLowerCase().includes('id del envío') || label.toLowerCase().includes('id del envio')) {
+                currentShipment = value;
+            } else if (label.toLowerCase().includes('código artículo') || label.toLowerCase().includes('codigo articulo')) {
+                // Si encontramos un nuevo código de artículo, procesar el registro anterior
+                if (currentOrder && currentShipment && currentArticleCode) {
+                    if (currentQuantities.length === 0) {
+                        records.push({
+                            loadId: loadId,
+                            shipmentId: currentShipment,
+                            orderNumber: currentOrder,
+                            articleCode: currentArticleCode,
+                            articleName: currentArticleName,
+                            quantity: ''
+                        });
+                    } else {
+                        // Crear un registro por cada cantidad
+                        for (const quantity of currentQuantities) {
+                            records.push({
+                                loadId: loadId,
+                                shipmentId: currentShipment,
+                                orderNumber: currentOrder,
+                                articleCode: currentArticleCode,
+                                articleName: currentArticleName,
+                                quantity: quantity
+                            });
+                        }
+                    }
+                }
+                
+                // Iniciar nuevo artículo
+                currentArticleCode = value;
+                currentArticleName = '';
+                currentQuantities = [];
+                
+            } else if (label.toLowerCase().includes('nombre de artículo') || label.toLowerCase().includes('nombre de articulo')) {
+                currentArticleName = value;
+            } else if (label.toLowerCase().includes('cantidad')) {
+                currentQuantities.push(value);
+            }
+        }
         
-        // Aplicar estilos básicos
-        worksheet['!cols'] = [
-            { width: 10 }, // Columna #
-            { width: 30 }  // Columna Valor
-        ];
-        
-        XLSX.utils.book_append_sheet(workbook, worksheet, category.substring(0, 31)); // Excel limita nombres de hoja a 31 caracteres
-    });
+        // Procesar el último registro
+        if (currentOrder && currentShipment && currentArticleCode) {
+            if (currentQuantities.length === 0) {
+                records.push({
+                    loadId: loadId,
+                    shipmentId: currentShipment,
+                    orderNumber: currentOrder,
+                    articleCode: currentArticleCode,
+                    articleName: currentArticleName,
+                    quantity: ''
+                });
+            } else {
+                // Crear un registro por cada cantidad
+                for (const quantity of currentQuantities) {
+                    records.push({
+                        loadId: loadId,
+                        shipmentId: currentShipment,
+                        orderNumber: currentOrder,
+                        articleCode: currentArticleCode,
+                        articleName: currentArticleName,
+                        quantity: quantity
+                    });
+                }
+            }
+        }
+    }
+    
+    console.log('📊 Registros agrupados:', records);
+    
+    // Crear encabezados
+    const headers = ['ID de carga', 'ID del envío', 'Número de orden', 'Código artículo', 'Nombre de artículo', 'Cantidad'];
+    allData.push(headers);
+    
+    // Crear filas de datos
+    if (records.length > 0) {
+        records.forEach(record => {
+            const row = [
+                record.loadId,
+                record.shipmentId,
+                record.orderNumber,
+                record.articleCode,
+                record.articleName,
+                record.quantity
+            ];
+            allData.push(row);
+        });
+    } else {
+        // Si no hay registros, agregar una fila vacía
+        allData.push(['', '', '', '', '', '']);
+    }
+    
+    console.log('📊 Tabla final:', allData);
+    
+    const mainWorksheet = XLSX.utils.aoa_to_sheet(allData);
+    
+    // Aplicar estilos básicos con anchos fijos para las 6 columnas
+    mainWorksheet['!cols'] = [
+        { width: 20 },  // ID de carga
+        { width: 20 },  // ID del envío
+        { width: 25 },  // Número de orden
+        { width: 15 },  // Código artículo
+        { width: 50 },  // Nombre de artículo
+        { width: 15 }   // Cantidad
+    ];
+    
+    XLSX.utils.book_append_sheet(workbook, mainWorksheet, 'Datos Extraídos');
     
     // Hoja de resumen
     const summaryData = [
