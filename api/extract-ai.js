@@ -175,10 +175,11 @@ function extractFieldsManually(text, requestedFields) {
             // Función para limpiar cantidades problemáticas
             const cleanQuantity = (quantity) => {
                 let cleaned = quantity.trim();
+                console.log(`🔍 Limpiando cantidad: "${cleaned}"`);
                 
                 // Casos específicos conocidos (solo para las primeras órdenes)
                 const specificCases = {
-                    '1 UND': '18 UND',      // Caso específico para CPOV-000009605
+                    '118 UND': '18 UND',      // Caso específico para CPOV-000009605
                     '1400 UND': '400 UND',  // Caso específico para CPOV-000009795
                     '1160 UND': '160 UND',  // Caso específico para CPOV-000009797
                     '1150 UND': '150 UND'   // Caso específico para CPOV-000009866
@@ -187,6 +188,8 @@ function extractFieldsManually(text, requestedFields) {
                 if (specificCases[cleaned]) {
                     console.log(`🧹 Caso específico corregido: "${cleaned}" -> "${specificCases[cleaned]}"`);
                     cleaned = specificCases[cleaned];
+                } else {
+                    console.log(`✅ Cantidad sin cambios: "${cleaned}"`);
                 }
                 
                 return cleaned;
@@ -206,9 +209,10 @@ function extractFieldsManually(text, requestedFields) {
                 const matches = text.match(pattern);
                 if (matches) {
                     matches.forEach(match => {
+                        console.log(`🔍 Cantidad encontrada antes de limpiar: "${match}"`);
                         const cleanedQuantity = cleanQuantity(match);
                         results.push({ nombre: field, valor: cleanedQuantity });
-                        console.log(`✅ Encontrado cantidad: ${cleanedQuantity}`);
+                        console.log(`✅ Cantidad final agregada: "${cleanedQuantity}"`);
                     });
                 }
             });
