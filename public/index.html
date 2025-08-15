@@ -855,6 +855,26 @@
                     body: formData
                 });
 
+                // Verificar si la respuesta es un archivo Excel
+                const contentType = response.headers.get('content-type');
+                if (contentType && contentType.includes('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')) {
+                    // Es un archivo Excel, descargarlo directamente
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'datos_extraidos.xlsx';
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    
+                    // Mostrar mensaje de éxito
+                    showSuccess(`✅ Extracción exitosa! El archivo Excel se ha descargado. Revisa tu carpeta de descargas.`);
+                    return;
+                }
+
+                // Si no es Excel, intentar parsear como JSON
                 const data = await response.json();
 
                 if (data.success) {
