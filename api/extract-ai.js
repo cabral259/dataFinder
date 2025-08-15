@@ -272,6 +272,7 @@ function generateExcel(structuredData) {
                     } else {
                         // Crear un registro por cada cantidad
                         for (const quantity of currentQuantities) {
+                            console.log(`📝 Creando registro: Orden=${currentOrder}, Artículo=${currentArticleName}, Cantidad="${quantity}"`);
                             records.push({
                                 loadId: loadId,
                                 orderNumber: currentOrder,
@@ -290,6 +291,7 @@ function generateExcel(structuredData) {
             } else if (label.toLowerCase().includes('nombre de artículo') || label.toLowerCase().includes('nombre de articulo') || label.toLowerCase().includes('article name')) {
                 currentArticleName = value;
             } else if (label.toLowerCase().includes('cantidad')) {
+                console.log(`📦 Agregando cantidad: "${value}" para orden: ${currentOrder}`);
                 currentQuantities.push(value);
             }
         }
@@ -495,6 +497,12 @@ module.exports = async (req, res) => {
 
                 // Log de los primeros datos para debugging
                 console.log('📋 Primeros 3 datos extraídos:', extractedData.slice(0, 3));
+                
+                // Log detallado de todos los datos extraídos
+                console.log('📊 Todos los datos extraídos:');
+                extractedData.forEach((item, index) => {
+                    console.log(`${index + 1}. ${item.nombre || item.label}: "${item.valor || item.value}"`);
+                });
 
                 // Generar Excel
                 const excelBuffer = generateExcel(extractedData);
