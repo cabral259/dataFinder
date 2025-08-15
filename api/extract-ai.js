@@ -225,55 +225,81 @@ function generateExcel(structuredData) {
     const quantities = groupedData['Cantidad'] || [];
 
     // Crear registros combinando los datos
+    // Procesar datos para crear registros usando la lógica del servidor local
     const records = [];
     
-    // Crear un Set para evitar duplicados
-    const uniqueCombinations = new Set();
-    
-    // Procesar los datos extraídos en el orden que vienen
-    for (let i = 0; i < structuredData.length; i++) {
-        const item = structuredData[i];
-        const label = item.label || item.nombre;
-        const value = item.value || item.valor;
+    if (structuredData && structuredData.length > 0) {
+        // Procesar los datos secuencialmente para mantener las relaciones exactas
+        let currentOrder = '';
+        let currentArticleName = '';
+        let currentQuantities = [];
         
-        if (label.toLowerCase().includes('orden') || label.toLowerCase().includes('order')) {
-            // Buscar el artículo y cantidad asociados a esta orden
-            let currentArticle = '';
-            let currentQuantity = '';
+        for (let i = 0; i < structuredData.length; i++) {
+            const item = structuredData[i];
+            const label = item.label || item.nombre || '';
+            const value = item.value || item.valor || '';
             
-            // Buscar hacia adelante para encontrar artículo y cantidad
-            for (let j = i + 1; j < structuredData.length; j++) {
-                const nextItem = structuredData[j];
-                const nextLabel = nextItem.label || nextItem.nombre;
-                const nextValue = nextItem.value || nextItem.valor;
-                
-                if (nextLabel.toLowerCase().includes('orden') || nextLabel.toLowerCase().includes('order')) {
-                    break; // Nueva orden encontrada, parar
-                } else if (nextLabel.toLowerCase().includes('artículo') || nextLabel.toLowerCase().includes('article')) {
-                    currentArticle = nextValue;
-                } else if (nextLabel.toLowerCase().includes('cantidad')) {
-                    currentQuantity = nextValue;
+            if (label.toLowerCase().includes('número de orden') || label.toLowerCase().includes('numero de orden') || label.toLowerCase().includes('order number')) {
+                // Si tenemos datos acumulados, crear registros
+                if (currentOrder && currentArticleName) {
+                    if (currentQuantities.length === 0) {
+                        records.push({
+                            loadId: loadId,
+                            orderNumber: currentOrder,
+                            articleName: currentArticleName,
+                            quantity: ''
+                        });
+                    } else {
+                        // Crear un registro por cada cantidad
+                        for (const quantity of currentQuantities) {
+                            records.push({
+                                loadId: loadId,
+                                orderNumber: currentOrder,
+                                articleName: currentArticleName,
+                                quantity: quantity
+                            });
+                        }
+                    }
                 }
+                
+                // Iniciar nuevo registro
+                currentOrder = value;
+                currentArticleName = '';
+                currentQuantities = [];
+                
+            } else if (label.toLowerCase().includes('nombre de artículo') || label.toLowerCase().includes('nombre de articulo') || label.toLowerCase().includes('article name')) {
+                currentArticleName = value;
+            } else if (label.toLowerCase().includes('cantidad')) {
+                currentQuantities.push(value);
             }
-            
-            // Crear combinación única
-            const combination = `${value}|${currentArticle}|${currentQuantity}`;
-            
-            if (!uniqueCombinations.has(combination) && currentArticle) {
-                uniqueCombinations.add(combination);
+        }
+        
+        // Procesar el último registro
+        if (currentOrder && currentArticleName) {
+            if (currentQuantities.length === 0) {
                 records.push({
                     loadId: loadId,
-                    orderNumber: value,
-                    articleName: currentArticle,
-                    quantity: currentQuantity
+                    orderNumber: currentOrder,
+                    articleName: currentArticleName,
+                    quantity: ''
                 });
+            } else {
+                // Crear un registro por cada cantidad
+                for (const quantity of currentQuantities) {
+                    records.push({
+                        loadId: loadId,
+                        orderNumber: currentOrder,
+                        articleName: currentArticleName,
+                        quantity: quantity
+                    });
+                }
             }
         }
     }
     
-    // Si no hay registros, usar los datos agrupados como fallback
+    // Si no hay registros con la lógica secuencial, usar fallback
     if (records.length === 0) {
-        // Crear registros únicos por combinación de orden + artículo
+        console.log('⚠️ Usando lógica de fallback para crear registros...');
         const seenCombinations = new Set();
         
         for (let i = 0; i < orderNumbers.length; i++) {
