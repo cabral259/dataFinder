@@ -354,8 +354,36 @@ module.exports = async (req, res) => {
                 const file = files[0];
                 
                 if (file.mimetype === 'application/pdf') {
-                    // Para PDF, usar texto simple por ahora
-                    extractedText = 'Texto extraído del PDF - implementar extracción completa';
+                    // Extraer texto real del PDF
+                    try {
+                        const pdfjsLib = require('pdfjs-dist');
+                        const pdf = await pdfjsLib.getDocument({ data: file.buffer }).promise;
+                        const numPages = pdf.numPages;
+                        const maxPages = Math.min(numPages, 50);
+                        
+                        const pageTexts = [];
+                        for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
+                            try {
+                                const page = await pdf.getPage(pageNum);
+                                const textContent = await page.getTextContent();
+                                const pageText = textContent.items
+                                    .map(item => item.str || '')
+                                    .join(' ');
+                                pageTexts.push(pageText);
+                            } catch (pageError) {
+                                console.log(`⚠️ Error en página ${pageNum}: ${pageError.message}`);
+                            }
+                        }
+                        
+                        extractedText = pageTexts.join('\n');
+                        console.log(`📄 Texto extraído del PDF: ${extractedText.length} caracteres`);
+                    } catch (pdfError) {
+                        console.error('❌ Error extrayendo PDF:', pdfError.message);
+                        return res.status(500).json({
+                            success: false,
+                            error: 'Error extrayendo texto del PDF'
+                        });
+                    }
                 } else {
                     extractedText = file.buffer.toString('utf8');
                 }
