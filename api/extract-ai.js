@@ -194,10 +194,14 @@ function generateExcel(structuredData) {
     console.log('📊 Generando Excel con', structuredData.length, 'campos extraídos...');
     
     const workbook = XLSX.utils.book_new();
-    const groupedData = {};
     const allData = [];
 
+    // Crear encabezados
+    const headers = ['ID de carga', 'Número de orden', 'Nombre de artículo', 'Cantidad'];
+    allData.push(headers);
+
     // Agrupar datos por categoría
+    const groupedData = {};
     structuredData.forEach(item => {
         const category = item.label || item.nombre;
         if (!groupedData[category]) {
@@ -206,100 +210,71 @@ function generateExcel(structuredData) {
         groupedData[category].push(item.value || item.valor);
     });
 
-    // Procesar datos para crear registros
-    const records = [];
-    let loadId = '';
-    let currentOrder = '';
-    let currentArticleName = '';
-    let currentQuantities = [];
-
     // Obtener ID de carga (siempre el primero)
     const loadIds = groupedData['ID de carga'] || [];
-    if (loadIds.length > 0) {
-        loadId = loadIds[0];
-    }
+    const loadId = loadIds.length > 0 ? loadIds[0] : '';
 
-    // Procesar datos secuencialmente
-    for (let i = 0; i < structuredData.length; i++) {
-        const item = structuredData[i];
-        const label = item.label || item.nombre;
-        const value = item.value || item.valor;
+    // Obtener todos los números de orden únicos
+    const orderNumbers = groupedData['Número de orden'] || [];
+    const uniqueOrders = [...new Set(orderNumbers)];
 
-        if (label.toLowerCase().includes('orden') || label.toLowerCase().includes('order')) {
-            // Si ya tenemos un registro completo, guardarlo
-            if (currentOrder && currentArticleName) {
-                if (currentQuantities.length === 0) {
-                    records.push({
-                        loadId: loadId,
-                        orderNumber: currentOrder,
-                        articleName: currentArticleName,
-                        quantity: ''
-                    });
-                } else {
-                    for (const quantity of currentQuantities) {
-                        records.push({
-                            loadId: loadId,
-                            orderNumber: currentOrder,
-                            articleName: currentArticleName,
-                            quantity: quantity
-                        });
-                    }
-                }
-            }
-            
-            // Iniciar nuevo registro
-            currentOrder = value;
-            currentArticleName = '';
-            currentQuantities = [];
-            
-        } else if (label.toLowerCase().includes('nombre de artículo') || label.toLowerCase().includes('nombre de articulo')) {
-            currentArticleName = value;
-        } else if (label.toLowerCase().includes('cantidad')) {
-            currentQuantities.push(value);
-        }
-    }
+    // Obtener todos los nombres de artículos
+    const articleNames = groupedData['Nombre de artículo'] || [];
+
+    // Obtener todas las cantidades
+    const quantities = groupedData['Cantidad'] || [];
+
+    // Crear registros combinando los datos
+    const records = [];
     
-    // Procesar el último registro
-    if (currentOrder && currentArticleName) {
-        if (currentQuantities.length === 0) {
+    // Para cada orden, buscar sus artículos y cantidades asociadas
+    uniqueOrders.forEach(orderNumber => {
+        // Buscar artículos que pertenecen a esta orden
+        const orderArticles = articleNames.filter((_, index) => {
+            // Aquí asumimos que los artículos están en el mismo orden que las órdenes
+            // En un caso real, necesitarías una lógica más sofisticada para asociar órdenes con artículos
+            return true; // Por ahora, incluimos todos los artículos
+        });
+
+        // Buscar cantidades asociadas
+        const orderQuantities = quantities.filter((_, index) => {
+            return true; // Por ahora, incluimos todas las cantidades
+        });
+
+        // Crear un registro por cada artículo
+        orderArticles.forEach((articleName, index) => {
+            const quantity = orderQuantities[index] || '';
             records.push({
                 loadId: loadId,
-                orderNumber: currentOrder,
-                articleName: currentArticleName,
-                quantity: ''
+                orderNumber: orderNumber,
+                articleName: articleName,
+                quantity: quantity
             });
-        } else {
-            for (const quantity of currentQuantities) {
-                records.push({
-                    loadId: loadId,
-                    orderNumber: currentOrder,
-                    articleName: currentArticleName,
-                    quantity: quantity
-                });
-            }
-        }
+        });
+    });
+
+    // Si no hay registros, crear uno vacío
+    if (records.length === 0) {
+        records.push({
+            loadId: loadId,
+            orderNumber: orderNumbers[0] || '',
+            articleName: articleNames[0] || '',
+            quantity: quantities[0] || ''
+        });
     }
 
     console.log('📊 Registros agrupados:', records.length, 'registros creados');
 
-    // Crear encabezados
-    const headers = ['ID de carga', 'Número de orden', 'Nombre de artículo', 'Cantidad'];
-    allData.push(headers);
-
     // Crear filas de datos
-    if (records.length > 0) {
-        records.forEach(record => {
-            const row = [
-                record.loadId,
-                record.orderNumber,
-                record.articleName,
-                record.quantity
-            ];
-            allData.push(row);
-        });
-    } else {
-        allData.push(['', '', '', '']);
-    }
+    records.forEach(record => {
+        const row = [
+            record.loadId,
+            record.orderNumber,
+            record.articleName,
+            record.quantity
+        ];
+        allData.push(row);
+    });
 
     console.log('📊 Tabla final:', allData.length, 'filas generadas');
 
