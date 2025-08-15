@@ -112,6 +112,8 @@ Reglas:
 // Función de extracción manual (fallback)
 function extractFieldsManually(text, requestedFields) {
     console.log('🔍 Iniciando extracción manual...');
+    console.log('📄 Longitud del texto a procesar:', text.length);
+    console.log('📋 Campos solicitados:', requestedFields);
     const results = [];
 
     requestedFields.forEach(field => {
@@ -233,6 +235,7 @@ function extractFieldsManually(text, requestedFields) {
     });
 
     console.log(`📊 Total de campos encontrados manualmente: ${results.length}`);
+    console.log('📋 Resultados finales de extracción manual:', results);
     return results;
 }
 
@@ -537,10 +540,10 @@ module.exports = async (req, res) => {
                     extractedText = file.buffer.toString('utf8');
                 }
 
-                        // Extraer datos con IA
-        console.log('🔍 Iniciando extracción con IA...');
-        const extractedData = await extractWithAI(extractedText, requestedFields);
-        console.log('📊 Datos extraídos:', extractedData.length, 'campos');
+                        // Extraer datos - FORZAR extracción manual en Vercel
+        console.log('🔍 FORZANDO extracción manual en Vercel...');
+        const extractedData = extractFieldsManually(extractedText, requestedFields);
+        console.log('📊 Datos extraídos manualmente:', extractedData.length, 'campos');
 
                 if (extractedData.length === 0) {
                     console.error('❌ No se pudieron extraer datos del archivo');
