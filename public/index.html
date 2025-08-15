@@ -849,7 +849,8 @@
             formData.append('fields', JSON.stringify(selectedFields));
 
             try {
-                const apiEndpoint = '/api/extract-ai';
+                // Usar URL completa para Vercel
+                const apiEndpoint = window.location.origin + '/api/extract-ai';
                 const response = await fetch(apiEndpoint, {
                     method: 'POST',
                     body: formData
