@@ -914,6 +914,22 @@
                 }
             } catch (error) {
                 console.error('Error en la extracción:', error);
+                
+                let errorMessage = error.message || 'Error desconocido';
+                let suggestion = 'Verifica que el archivo no esté corrupto y que sea un formato válido (PDF, Excel, Word).';
+                
+                // Mensajes más específicos según el tipo de error
+                if (error.message.includes('Failed to fetch')) {
+                    errorMessage = 'Error de conexión con el servidor';
+                    suggestion = 'Verifica tu conexión a internet y vuelve a intentar. Si el problema persiste, contacta al administrador.';
+                } else if (error.message.includes('500')) {
+                    errorMessage = 'Error interno del servidor';
+                    suggestion = 'El servidor está experimentando problemas. Intenta más tarde o contacta al administrador.';
+                } else if (error.message.includes('413')) {
+                    errorMessage = 'Archivo demasiado grande';
+                    suggestion = 'El archivo excede el límite de tamaño permitido. Intenta con un archivo más pequeño.';
+                }
+                
                 results.innerHTML = `
                     <div class="result-card error">
                         <div class="result-header">
@@ -921,8 +937,9 @@
                             <div class="result-status error">Error</div>
                         </div>
                         <div class="result-details">
-                            <p><strong>Error:</strong> ${error.message || 'Error desconocido'}</p>
-                            <p><strong>Sugerencia:</strong> Verifica que el archivo no esté corrupto y que sea un formato válido (PDF, Excel, Word).</p>
+                            <p><strong>Error:</strong> ${errorMessage}</p>
+                            <p><strong>Sugerencia:</strong> ${suggestion}</p>
+                            <p><strong>URL de la API:</strong> ${apiEndpoint}</p>
                         </div>
                     </div>
                 `;

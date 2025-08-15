@@ -327,10 +327,11 @@ function generateExcel(structuredData) {
 
 // Función principal de la API para Vercel
 module.exports = async (req, res) => {
-    // Configurar CORS
+    // Configurar CORS más permisivo
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader('Access-Control-Max-Age', '86400');
 
     // Manejar preflight requests
     if (req.method === 'OPTIONS') {
@@ -342,12 +343,27 @@ module.exports = async (req, res) => {
         return res.status(405).json({ error: 'Method not allowed' });
     }
 
+    // Agregar headers adicionales para mejor compatibilidad
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+
     try {
-        // Verificar API key
+        // Verificar API key con mejor manejo de errores
         if (!process.env.GEMINI_API_KEY) {
+            console.error('❌ API Key de Gemini no configurada en variables de entorno');
             return res.status(500).json({
                 success: false,
-                error: 'API Key de Gemini no configurada'
+                error: 'Error de configuración del servidor. Contacta al administrador.'
+            });
+        }
+
+        // Verificar que la API key sea válida
+        if (process.env.GEMINI_API_KEY === 'tu_api_key_de_gemini_aqui') {
+            console.error('❌ API Key de Gemini no ha sido configurada correctamente');
+            return res.status(500).json({
+                success: false,
+                error: 'Error de configuración del servidor. Contacta al administrador.'
             });
         }
 
@@ -362,8 +378,16 @@ module.exports = async (req, res) => {
             }
 
             try {
+                console.log('📥 Petición recibida:', {
+                    method: req.method,
+                    headers: req.headers,
+                    bodyKeys: Object.keys(req.body || {}),
+                    filesCount: req.files ? req.files.length : 0
+                });
+
                 const files = req.files || [];
                 if (files.length === 0) {
+                    console.error('❌ No se subieron archivos');
                     return res.status(400).json({
                         success: false,
                         error: 'No se subieron archivos'
