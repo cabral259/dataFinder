@@ -172,6 +172,17 @@ function extractFieldsManually(text, requestedFields) {
                 }
             });
         } else if (fieldLower.includes('cantidad')) {
+            // Función para limpiar cantidades problemáticas
+            const cleanQuantity = (quantity) => {
+                let cleaned = quantity.trim();
+                // Remover "1" extra al inicio si está seguido de otro número
+                if (cleaned.match(/^1(\d+)\s+UND$/)) {
+                    cleaned = cleaned.replace(/^1(\d+)\s+UND$/, '$1 UND');
+                    console.log(`🧹 Cantidad limpiada: "${quantity}" -> "${cleaned}"`);
+                }
+                return cleaned;
+            };
+            
             // Buscar cantidades con diferentes formatos
             const quantityPatterns = [
                 /\d+\s+(?:UND|UNIDADES|PCS|PIEZAS)/gi,
@@ -186,8 +197,9 @@ function extractFieldsManually(text, requestedFields) {
                 const matches = text.match(pattern);
                 if (matches) {
                     matches.forEach(match => {
-                        results.push({ nombre: field, valor: match.trim() });
-                        console.log(`✅ Encontrado cantidad: ${match.trim()}`);
+                        const cleanedQuantity = cleanQuantity(match);
+                        results.push({ nombre: field, valor: cleanedQuantity });
+                        console.log(`✅ Encontrado cantidad: ${cleanedQuantity}`);
                     });
                 }
             });
@@ -198,8 +210,9 @@ function extractFieldsManually(text, requestedFields) {
                 numberOnlyMatches.forEach(match => {
                     const num = parseInt(match.trim());
                     if (num > 0 && num <= 9999) { // Filtrar números razonables
-                        results.push({ nombre: field, valor: match.trim() });
-                        console.log(`✅ Encontrado cantidad (solo número): ${match.trim()}`);
+                        const cleanedQuantity = cleanQuantity(match);
+                        results.push({ nombre: field, valor: cleanedQuantity });
+                        console.log(`✅ Encontrado cantidad (solo número): ${cleanedQuantity}`);
                     }
                 });
             }
@@ -475,6 +488,14 @@ module.exports = async (req, res) => {
                 // Buscar cantidades específicas en el texto para verificar
                 const quantityMatches = extractedText.match(/(\d+)\s+UND/gi);
                 console.log('🔍 Cantidades encontradas en el texto:', quantityMatches);
+                
+                // Buscar patrones problemáticos que puedan estar causando el "1" extra
+                const problematicPatterns = extractedText.match(/(?:1\s*)?(\d+)\s+UND/gi);
+                console.log('⚠️ Patrones problemáticos encontrados:', problematicPatterns);
+                
+                // Buscar números que empiecen con 1 seguidos de otros números
+                const onePattern = extractedText.match(/1(\d+)\s+UND/gi);
+                console.log('🔍 Números que empiezan con 1:', onePattern);
                         
                         if (extractedText.length < 100) {
                             console.warn('⚠️ Texto extraído muy corto, puede haber problemas con el PDF');
