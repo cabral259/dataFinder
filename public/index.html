@@ -688,14 +688,6 @@
                                     <span>ID de carga</span>
                                 </label>
                                 <label class="radio-label">
-                                    <input type="checkbox" id="shipmentId" value="ID del envío">
-                                    <span>ID del envío</span>
-                                </label>
-                                <label class="radio-label">
-                                    <input type="checkbox" id="articleCode" value="Código artículo">
-                                    <span>Código artículo</span>
-                                </label>
-                                <label class="radio-label">
                                     <input type="checkbox" id="articleName" value="Nombre de artículo">
                                     <span>Nombre de artículo</span>
                                 </label>
@@ -755,8 +747,6 @@
         // Los checkboxes empiezan desmarcados por defecto
         document.getElementById('orderNumber').checked = false;
         document.getElementById('loadId').checked = false;
-        document.getElementById('shipmentId').checked = false;
-        document.getElementById('articleCode').checked = false;
         document.getElementById('articleName').checked = false;
         document.getElementById('quantity').checked = false;
 
@@ -817,14 +807,12 @@
             // Obtener referencias a los checkboxes
             const orderNumberCheckbox = document.getElementById('orderNumber');
             const loadIdCheckbox = document.getElementById('loadId');
-            const shipmentIdCheckbox = document.getElementById('shipmentId');
-            const articleCodeCheckbox = document.getElementById('articleCode');
             const articleNameCheckbox = document.getElementById('articleName');
             const quantityCheckbox = document.getElementById('quantity');
             
             // Validar que al menos un campo esté seleccionado
-            if (!orderNumberCheckbox.checked && !loadIdCheckbox.checked && !shipmentIdCheckbox.checked && 
-                !articleCodeCheckbox.checked && !articleNameCheckbox.checked && !quantityCheckbox.checked) {
+            if (!orderNumberCheckbox.checked && !loadIdCheckbox.checked && 
+                !articleNameCheckbox.checked && !quantityCheckbox.checked) {
                 alert('⚠️ Por favor selecciona al menos un campo para extraer.');
                 return;
             }
@@ -850,12 +838,6 @@
             }
             if (loadIdCheckbox.checked) {
                 selectedFields.push('ID de carga');
-            }
-            if (shipmentIdCheckbox.checked) {
-                selectedFields.push('ID del envío');
-            }
-            if (articleCodeCheckbox.checked) {
-                selectedFields.push('Código artículo');
             }
             if (articleNameCheckbox.checked) {
                 selectedFields.push('Nombre de artículo');
@@ -1026,8 +1008,6 @@
                             const selectedFields = [];
                             const orderNumberCheckbox = document.getElementById('orderNumber');
                             const loadIdCheckbox = document.getElementById('loadId');
-                            const shipmentIdCheckbox = document.getElementById('shipmentId');
-                            const articleCodeCheckbox = document.getElementById('articleCode');
                             const articleNameCheckbox = document.getElementById('articleName');
                             const quantityCheckbox = document.getElementById('quantity');
                             
@@ -1036,12 +1016,6 @@
                             }
                             if (loadIdCheckbox.checked) {
                                 selectedFields.push('ID de carga');
-                            }
-                            if (shipmentIdCheckbox.checked) {
-                                selectedFields.push('ID del envío');
-                            }
-                            if (articleCodeCheckbox.checked) {
-                                selectedFields.push('Código artículo');
                             }
                             if (articleNameCheckbox.checked) {
                                 selectedFields.push('Nombre de artículo');
