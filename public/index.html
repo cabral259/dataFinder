@@ -810,10 +810,10 @@
             const articleNameCheckbox = document.getElementById('articleName');
             const quantityCheckbox = document.getElementById('quantity');
             
-            // Validar que al menos un campo esté seleccionado
-            if (!orderNumberCheckbox.checked && !loadIdCheckbox.checked && 
-                !articleNameCheckbox.checked && !quantityCheckbox.checked) {
-                alert('⚠️ Por favor selecciona al menos un campo para extraer.');
+            // Validar que todos los campos estén seleccionados
+            if (!orderNumberCheckbox.checked || !loadIdCheckbox.checked || 
+                !articleNameCheckbox.checked || !quantityCheckbox.checked) {
+                alert('⚠️ Por favor selecciona todos los campos: Número de orden, ID de carga, Nombre de artículo y Cantidad');
                 return;
             }
 
@@ -874,8 +874,8 @@
                         displayResults(data.results);
                     }
                     
-                    // Solo mostrar estadísticas si NO es extracción inteligente con descarga automática
-                    if (data.stats && !(data.results && data.results.length > 0 && data.results[0].structuredData && data.results[0].structuredData.length > 0)) {
+                    // Mostrar estadísticas siempre
+                    if (data.stats) {
                         displayStats(data.stats);
                     }
                 } else {
@@ -892,6 +892,7 @@
                     `;
                 }
             } catch (error) {
+                console.error('Error en la extracción:', error);
                 results.innerHTML = `
                     <div class="result-card error">
                         <div class="result-header">
@@ -899,7 +900,8 @@
                             <div class="result-status error">Error</div>
                         </div>
                         <div class="result-details">
-                            <p><strong>Error:</strong> ${error.message}</p>
+                            <p><strong>Error:</strong> ${error.message || 'Error desconocido'}</p>
+                            <p><strong>Sugerencia:</strong> Verifica que el archivo no esté corrupto y que sea un formato válido (PDF, Excel, Word).</p>
                         </div>
                     </div>
                 `;
@@ -925,6 +927,7 @@
                     card.innerHTML = `
                         <div class="error-badge">❌ Error al procesar el archivo</div>
                         <p class="error-message">${result.error || 'Error desconocido'}</p>
+                        <p class="error-suggestion">💡 Verifica que el archivo no esté corrupto y que sea un formato válido.</p>
                     `;
                     resultsContainer.appendChild(card);
                     return;
@@ -1163,15 +1166,15 @@
                 
                 statsGridContainer.innerHTML = `
                     <div class="stat-item">
-                        <div class="stat-number">${statsData.totalFiles}</div>
+                        <div class="stat-number">${statsData.totalFiles || 0}</div>
                         <div class="stat-label">Total de Archivos</div>
                     </div>
                     <div class="stat-item">
-                        <div class="stat-number">${statsData.successful}</div>
+                        <div class="stat-number">${statsData.successful || 0}</div>
                         <div class="stat-label">Exitosos</div>
                     </div>
                     <div class="stat-item">
-                        <div class="stat-number">${statsData.failed}</div>
+                        <div class="stat-number">${statsData.failed || 0}</div>
                         <div class="stat-label">Fallidos</div>
                     </div>
                 `;

@@ -66,13 +66,19 @@ async function extractWithAI(text, requestedFields) {
     try {
         console.log('🤖 Iniciando extracción con Gemini Flash...');
         console.log('📋 Campos solicitados:', requestedFields);
-        console.log('📄 Texto recibido (primeros 1000 chars):', text.substring(0, 1000));
         console.log('📄 Longitud del texto:', text.length);
         
         // Si el texto está vacío, devolver error
         if (!text || text.length === 0) {
             console.log('❌ Error: No se pudo extraer texto del documento');
             return [];
+        }
+        
+        // Optimización: Limitar el tamaño del texto para mejor rendimiento
+        const maxTextLength = 100000; // 100KB máximo (aumentado para archivos más grandes)
+        if (text.length > maxTextLength) {
+            console.log(`⚠️ Texto muy largo (${text.length} chars). Truncando a ${maxTextLength} chars para mejor rendimiento...`);
+            text = text.substring(0, maxTextLength);
         }
         
         // Verificar que la API key esté configurada
@@ -89,54 +95,47 @@ async function extractWithAI(text, requestedFields) {
             return [];
         }
         
-        // Usar Gemini Flash para extracción inteligente
-        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+        // Usar Gemini Flash para extracción inteligente con timeout optimizado
+        const model = genAI.getGenerativeModel({ 
+            model: "gemini-2.0-flash",
+            generationConfig: {
+                temperature: 0.1, // Más determinístico para mejor rendimiento
+                maxOutputTokens: 8000 // Aumentado para documentos más grandes
+            }
+        });
         
-        const prompt = `
-        Extrae EXACTAMENTE los siguientes campos del documento:
-        ${requestedFields.join(', ')}
-        
-        Documento:
-        ${text.substring(0, 30000)} // Usar más texto para mejor precisión
-        
-        Responde SOLO con un JSON válido en este formato:
-        {
-            "campos": [
-                {"nombre": "nombre_del_campo", "valor": "valor_extraido"},
-                {"nombre": "nombre_del_campo", "valor": "valor_extraido"}
-            ]
-        }
-        
-        Reglas CRÍTICAS Y OBLIGATORIAS:
-        1. Extrae SOLO los campos solicitados
-        2. Si no encuentras un campo, no lo incluyas
-        3. Mantén el formato exacto del valor encontrado
-        4. Para números de orden, incluye SOLO valores únicos (sin duplicados)
-        5. Para ID de carga, incluye todos los valores encontrados (pueden repetirse)
-        6. Para CANTIDADES, es OBLIGATORIO extraer CADA instancia individual:
-           - Si ves "15 UND" tres veces en el documento, incluye "15 UND" tres veces
-           - Si ves "200 UND" dos veces, incluye "200 UND" dos veces
-           - NO agrupes cantidades iguales, incluye cada una por separado
-           - Esto es esencial para capturar todas las entradas del documento
-        7. Para otros campos, si hay múltiples valores diferentes, incluye todos
-        8. Responde SOLO con el JSON, sin texto adicional
-        
-        REGLA MÁS IMPORTANTE: 
-        - DEBES extraer TODOS los artículos que encuentres en el documento
-        - NO omitas ningún artículo, por más que parezcan similares
-        - Si una orden tiene 18 artículos, extrae los 18 artículos
-        - Si una orden tiene 11 artículos, extrae los 11 artículos
-        - NO hagas resúmenes, extrae CADA artículo individual
-        
-        IMPORTANTE: Para cantidades, extrae CADA entrada individual que veas en el documento, incluso si son repetidas.
-        `;
+        const prompt = `Extrae EXACTAMENTE estos campos: ${requestedFields.join(', ')}
+
+Documento: ${text.substring(0, 15000)}
+
+IMPORTANTE: Responde SOLO con UN objeto JSON en este formato exacto:
+{"campos": [{"nombre": "campo", "valor": "valor"}]}
+
+Reglas:
+- Extrae SOLO campos solicitados
+- Números de orden: valores únicos
+- ID de carga: puede repetirse
+- Cantidades: CADA instancia individual (no agrupar)
+- Extrae TODOS los artículos sin omitir
+- NO incluyas texto adicional, solo el JSON`;
         
         console.log('🤖 Enviando prompt a Gemini...');
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        const aiResponse = response.text();
+        const startTime = Date.now();
         
-        console.log('🤖 Respuesta de Gemini:', aiResponse);
+        let aiResponse;
+        try {
+            const result = await model.generateContent(prompt);
+            const endTime = Date.now();
+            console.log(`⚡ Gemini respondió en ${endTime - startTime}ms`);
+            const response = await result.response;
+            aiResponse = response.text();
+        } catch (geminiError) {
+            console.error('❌ Error en Gemini:', geminiError.message);
+            console.log('🔄 Usando extracción manual como fallback...');
+            return extractFieldsManually(text, requestedFields);
+        }
+        
+        console.log('🤖 Respuesta de Gemini recibida (longitud:', aiResponse.length, 'chars)');
         
         // Limpiar la respuesta de Gemini (remover markdown si existe)
         let cleanResponse = aiResponse;
@@ -146,18 +145,28 @@ async function extractWithAI(text, requestedFields) {
         
         // Intentar parsear la respuesta JSON
         try {
-            const parsedData = JSON.parse(cleanResponse);
-            if (parsedData.campos && Array.isArray(parsedData.campos)) {
-                console.log(`✅ Gemini extrajo ${parsedData.campos.length} campos`);
-                return parsedData.campos;
+            // Si hay múltiples objetos JSON, tomar solo el primero
+            const firstBrace = cleanResponse.indexOf('{');
+            const lastBrace = cleanResponse.lastIndexOf('}');
+            
+            if (firstBrace !== -1 && lastBrace !== -1) {
+                const jsonString = cleanResponse.substring(firstBrace, lastBrace + 1);
+                const parsedData = JSON.parse(jsonString);
+                
+                if (parsedData.campos && Array.isArray(parsedData.campos)) {
+                    console.log(`✅ Gemini extrajo ${parsedData.campos.length} campos`);
+                    return parsedData.campos;
+                } else {
+                    console.log('⚠️ Respuesta de Gemini no tiene el formato esperado');
+                    return [];
+                }
             } else {
-                console.log('⚠️ Respuesta de Gemini no tiene el formato esperado');
+                console.log('⚠️ No se encontró JSON válido en la respuesta');
                 return [];
             }
         } catch (parseError) {
             console.log('⚠️ Error parseando JSON de Gemini:', parseError.message);
-            console.log('📄 Respuesta recibida:', aiResponse);
-            console.log('📄 Respuesta limpia:', cleanResponse);
+            console.log('📄 Respuesta recibida (primeros 500 chars):', aiResponse.substring(0, 500));
             return [];
         }
         
@@ -195,6 +204,24 @@ function extractFieldsManually(text, requestedFields) {
                             seenOrderNumbers.add(cleanMatch);
                             results.push({ nombre: field, valor: cleanMatch });
                             console.log(`✅ Encontrado orden único: ${cleanMatch}`);
+                        }
+                    });
+                }
+            });
+            
+            // Para cada orden encontrada, buscar sus artículos asociados
+            const orderNumbers = Array.from(seenOrderNumbers);
+            orderNumbers.forEach(orderNumber => {
+                // Buscar artículos asociados a esta orden
+                const orderSection = text.split(orderNumber)[1] || text;
+                const articleMatches = orderSection.match(/([A-Z\s\d\/\"\-\'\.]+(?:SONACA|CORVI)[A-Z\s\d\/\"\-\'\.]*)/gi);
+                
+                if (articleMatches) {
+                    articleMatches.forEach(article => {
+                        const cleanArticle = article.trim();
+                        if (cleanArticle.length > 10) { // Filtrar artículos válidos
+                            results.push({ nombre: 'Nombre de artículo', valor: cleanArticle });
+                            console.log(`✅ Encontrado artículo: ${cleanArticle}`);
                         }
                     });
                 }
@@ -277,7 +304,8 @@ function extractFieldsManually(text, requestedFields) {
             // Buscar cantidades
             const quantityPatterns = [
                 /\d+\s+(?:UND|UNIDADES|PCS|PIEZAS)/gi,
-                /(?:Cantidad|Quantity):\s*(\d+)/gi
+                /(?:Cantidad|Quantity):\s*(\d+)/gi,
+                /(\d+)\s+UND/gi
             ];
             
             quantityPatterns.forEach(pattern => {
@@ -289,6 +317,15 @@ function extractFieldsManually(text, requestedFields) {
                     });
                 }
             });
+            
+            // Buscar cantidades en formato específico del documento
+            const specificQuantityMatches = text.match(/(\d+)\s+UND/gi);
+            if (specificQuantityMatches) {
+                specificQuantityMatches.forEach(match => {
+                    results.push({ nombre: field, valor: match.trim() });
+                    console.log(`✅ Encontrado cantidad específica: ${match.trim()}`);
+                });
+            }
         }
     });
     
@@ -464,9 +501,23 @@ app.post('/api/extract-ai', upload.array('files'), async (req, res) => {
 
     } catch (error) {
         console.error('❌ Error en extracción con IA:', error);
+        
+        // Limpiar archivos subidos en caso de error
+        if (filePaths && filePaths.length > 0) {
+            filePaths.forEach(filePath => {
+                if (fs.existsSync(filePath)) {
+                    try {
+                        fs.unlinkSync(filePath);
+                    } catch (cleanupError) {
+                        console.log('⚠️ Error limpiando archivo:', cleanupError.message);
+                    }
+                }
+            });
+        }
+        
         res.status(500).json({
             success: false,
-            error: error.message
+            error: error.message || 'Error desconocido durante la extracción'
         });
     }
 });
@@ -745,7 +796,7 @@ async function generateWord(fileName, structuredData, fullText) {
 
 // Generar Excel
 async function generateExcel(fileName, structuredData, fullText) {
-    console.log('📊 Generando Excel con datos:', JSON.stringify(structuredData, null, 2));
+            console.log('📊 Generando Excel con', structuredData.length, 'campos extraídos...');
     const workbook = XLSX.utils.book_new();
     
     // Agrupar datos por categoría y eliminar duplicados
@@ -851,7 +902,7 @@ async function generateExcel(fileName, structuredData, fullText) {
             }
         }
     
-    console.log('📊 Registros agrupados:', records);
+            console.log('📊 Registros agrupados:', records.length, 'registros creados');
     
     // Crear encabezados
     const headers = ['ID de carga', 'Número de orden', 'Nombre de artículo', 'Cantidad'];
@@ -873,7 +924,7 @@ async function generateExcel(fileName, structuredData, fullText) {
         allData.push(['', '', '', '']);
     }
     
-    console.log('📊 Tabla final:', allData);
+            console.log('📊 Tabla final:', allData.length, 'filas generadas');
     
     const mainWorksheet = XLSX.utils.aoa_to_sheet(allData);
     

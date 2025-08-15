@@ -65,21 +65,17 @@ class ExtractorDatos {
             });
             const pdf = await loadingTask.promise;
             
-            let extractedText = '';
             const numPages = pdf.numPages;
             
-            // Verificar límite de páginas
-            if (numPages > 30) {
-                console.log(`⚠️ Documento muy grande (${numPages} páginas). Procesando solo las primeras 30 páginas...`);
+            // Verificar límite de páginas (aumentado de 30 a 50)
+            if (numPages > 50) {
+                console.log(`⚠️ Documento muy grande (${numPages} páginas). Procesando solo las primeras 50 páginas...`);
             }
             
-            const maxPages = Math.min(numPages, 30);
+            const maxPages = Math.min(numPages, 50);
             
-            // Array para almacenar el texto de cada página
-            const pageTexts = [];
-            
-            // Extraer texto de cada página con progreso
-            for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
+            // Función para procesar una página individual
+            const processPage = async (pageNum) => {
                 try {
                     console.log(`📄 Procesando página ${pageNum}/${maxPages}...`);
                     const page = await pdf.getPage(pageNum);
@@ -90,17 +86,33 @@ class ExtractorDatos {
                         .map(item => item.str || '')
                         .join(' ');
                     
-                    pageTexts.push(pageText);
-                    
+                    return pageText;
                 } catch (pageError) {
                     console.log(`⚠️ Error en página ${pageNum}: ${pageError.message}`);
-                    continue;
+                    return '';
                 }
+            };
+            
+            // Procesar páginas en paralelo para mejor rendimiento
+            console.log(`🚀 Procesando ${maxPages} páginas en paralelo...`);
+            const pagePromises = [];
+            for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
+                pagePromises.push(processPage(pageNum));
             }
             
-            // Unir todo el texto
-            extractedText = pageTexts.join('\n');
+            // Usar Promise.allSettled para manejar errores individuales sin fallar todo el proceso
+            const pageResults = await Promise.allSettled(pagePromises);
+            const pageTexts = pageResults.map(result => {
+                if (result.status === 'fulfilled') {
+                    return result.value;
+                } else {
+                    console.log(`⚠️ Error procesando página: ${result.reason}`);
+                    return '';
+                }
+            });
             
+            // Unir todo el texto
+            const extractedText = pageTexts.join('\n');
             let finalText = extractedText.trim();
             
             // Si se especifican campos específicos, filtrar el texto
