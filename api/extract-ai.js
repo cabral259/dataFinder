@@ -42,12 +42,14 @@ Documento: ${text.substring(0, 15000)}
 IMPORTANTE: Responde SOLO con UN objeto JSON en este formato exacto:
 {"campos": [{"nombre": "campo", "valor": "valor"}]}
 
-Reglas:
+Reglas CRÍTICAS:
 - Extrae SOLO campos solicitados
-- Números de orden: valores únicos
-- ID de carga: puede repetirse
-- Cantidades: CADA instancia individual (no agrupar)
-- Extrae TODOS los artículos sin omitir
+- Números de orden: valores únicos (formato CPOV-XXXXXX)
+- ID de carga: puede repetirse (formato CG-XXXXXX)
+- Cantidades: Extrae CADA cantidad individual con su formato completo (ej: "10 UND", "15 UND")
+- Nombres de artículo: Extrae el nombre completo del artículo
+- Extrae TODOS los artículos sin omitir NINGUNO
+- Para cantidades: Busca patrones como "10 UND", "15 UND", "200 UND"
 - NO incluyas texto adicional, solo el JSON`;
 
         console.log('🤖 Enviando prompt a Gemini...');
@@ -182,6 +184,24 @@ function extractFieldsManually(text, requestedFields) {
                     });
                 }
             });
+            
+            // Buscar cantidades en formato específico del documento
+            const specificQuantityMatches = text.match(/(\d+)\s+UND/gi);
+            if (specificQuantityMatches) {
+                specificQuantityMatches.forEach(match => {
+                    results.push({ nombre: field, valor: match.trim() });
+                    console.log(`✅ Encontrado cantidad específica: ${match.trim()}`);
+                });
+            }
+            
+            // Buscar cantidades adicionales con diferentes formatos
+            const additionalQuantityMatches = text.match(/(\d+)\s+(?:UNIDADES|PCS|PIEZAS)/gi);
+            if (additionalQuantityMatches) {
+                additionalQuantityMatches.forEach(match => {
+                    results.push({ nombre: field, valor: match.trim() });
+                    console.log(`✅ Encontrado cantidad adicional: ${match.trim()}`);
+                });
+            }
         }
     });
 
