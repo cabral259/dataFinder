@@ -20,35 +20,35 @@ async function extractWithAI(text, requestedFields) {
         console.log('📋 Campos solicitados:', requestedFields);
         console.log('📄 Longitud del texto:', text.length);
 
-        // Limitar el texto enviado a Gemini
-        const maxTextLength = 100000;
+        // Optimización: Limitar el tamaño del texto para mejor rendimiento (igual que local)
+        const maxTextLength = 100000; // 100KB máximo (aumentado para archivos más grandes)
         if (text.length > maxTextLength) {
+            console.log(`⚠️ Texto muy largo (${text.length} chars). Truncando a ${maxTextLength} chars para mejor rendimiento...`);
             text = text.substring(0, maxTextLength);
-            console.log(`📄 Texto truncado a ${maxTextLength} caracteres`);
         }
 
         const model = genAI.getGenerativeModel({ 
             model: "gemini-2.0-flash",
             generationConfig: {
-                temperature: 0.1,
-                maxOutputTokens: 8000
+                temperature: 0.1, // Más determinístico para mejor rendimiento
+                maxOutputTokens: 8000 // Aumentado para documentos más grandes
             }
         });
 
         const prompt = `Extrae EXACTAMENTE estos campos: ${requestedFields.join(', ')}
-        
-        Documento: ${text.substring(0, 15000)}
-        
-        IMPORTANTE: Responde SOLO con UN objeto JSON en este formato exacto:
-        {"campos": [{"nombre": "campo", "valor": "valor"}]}
-        
-        Reglas:
-        - Extrae SOLO campos solicitados
-        - Números de orden: valores únicos
-        - ID de carga: puede repetirse
-        - Cantidades: CADA instancia individual (no agrupar)
-        - Extrae TODOS los artículos sin omitir
-        - NO incluyas texto adicional, solo el JSON`;
+
+Documento: ${text.substring(0, 15000)}
+
+IMPORTANTE: Responde SOLO con UN objeto JSON en este formato exacto:
+{"campos": [{"nombre": "campo", "valor": "valor"}]}
+
+Reglas:
+- Extrae SOLO campos solicitados
+- Números de orden: valores únicos
+- ID de carga: puede repetirse
+- Cantidades: CADA instancia individual (no agrupar)
+- Extrae TODOS los artículos sin omitir
+- NO incluyas texto adicional, solo el JSON`;
 
         console.log('🤖 Enviando prompt a Gemini...');
         const startTime = Date.now();
