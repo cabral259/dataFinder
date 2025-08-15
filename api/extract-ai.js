@@ -526,13 +526,13 @@ module.exports = async (req, res) => {
                 extractedData.forEach((item, index) => {
                     console.log(`${index + 1}. ${item.nombre || item.label}: "${item.valor || item.value}"`);
                 });
-                
-                return extractedData;
 
                 // Generar Excel
+                console.log('📊 Generando archivo Excel...');
                 const excelBuffer = generateExcel(extractedData);
 
                 // Enviar respuesta
+                console.log('📤 Enviando archivo Excel...');
                 res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
                 res.setHeader('Content-Disposition', 'attachment; filename="datos_extraidos.xlsx"');
                 res.send(excelBuffer);
