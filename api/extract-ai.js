@@ -240,8 +240,8 @@ function extractFieldsManually(text, requestedFields) {
     });
 
     console.log(`📊 Total de campos encontrados manualmente: ${results.length}`);
-    console.log('📋 Resultados finales de extracción manual:', results);
-    return results;
+                    console.log('📋 Resultados finales de extracción manual:', results);
+                return results;
 }
 
 // Función para generar Excel
