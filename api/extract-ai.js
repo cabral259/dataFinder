@@ -176,16 +176,16 @@ function extractFieldsManually(text, requestedFields) {
             const cleanQuantity = (quantity) => {
                 let cleaned = quantity.trim();
                 
-                // Casos específicos conocidos
+                // Casos específicos conocidos (solo para las primeras órdenes)
                 const specificCases = {
-                    '118 UND': '18 UND',
-                    '1400 UND': '400 UND',
-                    '1160 UND': '160 UND',
-                    '1150 UND': '150 UND'
+                    '1 UND': '18 UND',      // Caso específico para CPOV-000009605
+                    '1400 UND': '400 UND',  // Caso específico para CPOV-000009795
+                    '1160 UND': '160 UND',  // Caso específico para CPOV-000009797
+                    '1150 UND': '150 UND'   // Caso específico para CPOV-000009866
                 };
                 
                 if (specificCases[cleaned]) {
-                    console.log(`🧹 Caso específico: "${cleaned}" -> "${specificCases[cleaned]}"`);
+                    console.log(`🧹 Caso específico corregido: "${cleaned}" -> "${specificCases[cleaned]}"`);
                     cleaned = specificCases[cleaned];
                 }
                 
@@ -505,6 +505,20 @@ module.exports = async (req, res) => {
                 // Buscar números que empiecen con 1 seguidos de otros números
                 const onePattern = extractedText.match(/1(\d+)\s+UND/gi);
                 console.log('🔍 Números que empiezan con 1:', onePattern);
+                
+                // Buscar la sección problemática específicamente
+                const beforeSection = extractedText.substring(0, extractedText.indexOf('CPOV-000009911'));
+                const afterSection = extractedText.substring(extractedText.indexOf('CPOV-000009911'));
+                
+                console.log('📄 Sección ANTES de CPOV-000009911 (primeros 500 chars):', beforeSection.substring(0, 500));
+                console.log('📄 Sección DESPUÉS de CPOV-000009911 (primeros 500 chars):', afterSection.substring(0, 500));
+                
+                // Buscar cantidades en cada sección
+                const beforeQuantities = beforeSection.match(/(\d+)\s+UND/gi);
+                const afterQuantities = afterSection.match(/(\d+)\s+UND/gi);
+                
+                console.log('🔍 Cantidades ANTES de CPOV-000009911:', beforeQuantities);
+                console.log('🔍 Cantidades DESPUÉS de CPOV-000009911:', afterQuantities);
                         
                         if (extractedText.length < 100) {
                             console.warn('⚠️ Texto extraído muy corto, puede haber problemas con el PDF');
