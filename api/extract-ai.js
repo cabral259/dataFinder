@@ -227,40 +227,72 @@ function generateExcel(structuredData) {
     // Crear registros combinando los datos
     const records = [];
     
-    // Para cada orden, buscar sus artículos y cantidades asociadas
-    uniqueOrders.forEach(orderNumber => {
-        // Buscar artículos que pertenecen a esta orden
-        const orderArticles = articleNames.filter((_, index) => {
-            // Aquí asumimos que los artículos están en el mismo orden que las órdenes
-            // En un caso real, necesitarías una lógica más sofisticada para asociar órdenes con artículos
-            return true; // Por ahora, incluimos todos los artículos
-        });
-
-        // Buscar cantidades asociadas
-        const orderQuantities = quantities.filter((_, index) => {
-            return true; // Por ahora, incluimos todas las cantidades
-        });
-
-        // Crear un registro por cada artículo
-        orderArticles.forEach((articleName, index) => {
-            const quantity = orderQuantities[index] || '';
-            records.push({
-                loadId: loadId,
-                orderNumber: orderNumber,
-                articleName: articleName,
-                quantity: quantity
-            });
-        });
-    });
-
-    // Si no hay registros, crear uno vacío
+    // Crear un Set para evitar duplicados
+    const uniqueCombinations = new Set();
+    
+    // Procesar los datos extraídos en el orden que vienen
+    for (let i = 0; i < structuredData.length; i++) {
+        const item = structuredData[i];
+        const label = item.label || item.nombre;
+        const value = item.value || item.valor;
+        
+        if (label.toLowerCase().includes('orden') || label.toLowerCase().includes('order')) {
+            // Buscar el artículo y cantidad asociados a esta orden
+            let currentArticle = '';
+            let currentQuantity = '';
+            
+            // Buscar hacia adelante para encontrar artículo y cantidad
+            for (let j = i + 1; j < structuredData.length; j++) {
+                const nextItem = structuredData[j];
+                const nextLabel = nextItem.label || nextItem.nombre;
+                const nextValue = nextItem.value || nextItem.valor;
+                
+                if (nextLabel.toLowerCase().includes('orden') || nextLabel.toLowerCase().includes('order')) {
+                    break; // Nueva orden encontrada, parar
+                } else if (nextLabel.toLowerCase().includes('artículo') || nextLabel.toLowerCase().includes('article')) {
+                    currentArticle = nextValue;
+                } else if (nextLabel.toLowerCase().includes('cantidad')) {
+                    currentQuantity = nextValue;
+                }
+            }
+            
+            // Crear combinación única
+            const combination = `${value}|${currentArticle}|${currentQuantity}`;
+            
+            if (!uniqueCombinations.has(combination) && currentArticle) {
+                uniqueCombinations.add(combination);
+                records.push({
+                    loadId: loadId,
+                    orderNumber: value,
+                    articleName: currentArticle,
+                    quantity: currentQuantity
+                });
+            }
+        }
+    }
+    
+    // Si no hay registros, usar los datos agrupados como fallback
     if (records.length === 0) {
-        records.push({
-            loadId: loadId,
-            orderNumber: orderNumbers[0] || '',
-            articleName: articleNames[0] || '',
-            quantity: quantities[0] || ''
-        });
+        // Crear registros únicos por combinación de orden + artículo
+        const seenCombinations = new Set();
+        
+        for (let i = 0; i < orderNumbers.length; i++) {
+            const orderNumber = orderNumbers[i];
+            const articleName = articleNames[i] || '';
+            const quantity = quantities[i] || '';
+            
+            const combination = `${orderNumber}|${articleName}`;
+            
+            if (!seenCombinations.has(combination) && articleName) {
+                seenCombinations.add(combination);
+                records.push({
+                    loadId: loadId,
+                    orderNumber: orderNumber,
+                    articleName: articleName,
+                    quantity: quantity
+                });
+            }
+        }
     }
 
     console.log('📊 Registros agrupados:', records.length, 'registros creados');
