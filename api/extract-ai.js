@@ -177,7 +177,7 @@ function extractFieldsManually(text, requestedFields) {
                 let cleaned = quantity.trim();
                 console.log(`🔍 Limpiando cantidad: "${cleaned}"`);
                 
-                // Casos específicos conocidos (solo para las primeras órdenes)
+                // Casos específicos conocidos (solo para las primeras órdenes) - VERCEL CACHE FIX
                 const specificCases = {
                     '118 UND': '18 UND',      // Caso específico para CPOV-000009605
                     '1400 UND': '400 UND',  // Caso específico para CPOV-000009795
@@ -422,6 +422,8 @@ module.exports = async (req, res) => {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
+    res.setHeader('X-Vercel-Cache-Bypass', 'true');
+    res.setHeader('X-Deploy-Timestamp', Date.now().toString());
 
     try {
         // Verificar API key con mejor manejo de errores
