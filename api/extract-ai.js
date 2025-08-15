@@ -42,14 +42,12 @@ Documento: ${text.substring(0, 15000)}
 IMPORTANTE: Responde SOLO con UN objeto JSON en este formato exacto:
 {"campos": [{"nombre": "campo", "valor": "valor"}]}
 
-Reglas CRÍTICAS:
+Reglas:
 - Extrae SOLO campos solicitados
-- Números de orden: valores únicos (formato CPOV-XXXXXX)
-- ID de carga: puede repetirse (formato CG-XXXXXX)
-- Cantidades: Extrae CADA cantidad individual con su formato completo (ej: "10 UND", "15 UND")
-- Nombres de artículo: Extrae el nombre completo del artículo
-- Extrae TODOS los artículos sin omitir NINGUNO
-- Para cantidades: Busca patrones como "10 UND", "15 UND", "200 UND"
+- Números de orden: valores únicos
+- ID de carga: puede repetirse
+- Cantidades: CADA instancia individual (no agrupar)
+- Extrae TODOS los artículos sin omitir
 - NO incluyas texto adicional, solo el JSON`;
 
         console.log('🤖 Enviando prompt a Gemini...');
@@ -169,6 +167,7 @@ function extractFieldsManually(text, requestedFields) {
                 }
             });
         } else if (fieldLower.includes('cantidad')) {
+            // Buscar cantidades
             const quantityPatterns = [
                 /\d+\s+(?:UND|UNIDADES|PCS|PIEZAS)/gi,
                 /(?:Cantidad|Quantity):\s*(\d+)/gi,
@@ -191,15 +190,6 @@ function extractFieldsManually(text, requestedFields) {
                 specificQuantityMatches.forEach(match => {
                     results.push({ nombre: field, valor: match.trim() });
                     console.log(`✅ Encontrado cantidad específica: ${match.trim()}`);
-                });
-            }
-            
-            // Buscar cantidades adicionales con diferentes formatos
-            const additionalQuantityMatches = text.match(/(\d+)\s+(?:UNIDADES|PCS|PIEZAS)/gi);
-            if (additionalQuantityMatches) {
-                additionalQuantityMatches.forEach(match => {
-                    results.push({ nombre: field, valor: match.trim() });
-                    console.log(`✅ Encontrado cantidad adicional: ${match.trim()}`);
                 });
             }
         }
