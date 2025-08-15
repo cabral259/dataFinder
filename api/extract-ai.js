@@ -410,16 +410,24 @@ module.exports = async (req, res) => {
                 const file = files[0];
                 
                 if (file.mimetype === 'application/pdf') {
-                    // Para PDF, usar extracción simple por ahora
+                    // Para PDF, usar extracción mejorada
                     try {
-                        // Intentar extraer texto básico del PDF
+                        console.log('📄 Procesando archivo PDF...');
                         const pdfParse = require('pdf-parse');
                         const pdfData = await pdfParse(file.buffer);
                         extractedText = pdfData.text;
                         console.log(`📄 Texto extraído del PDF: ${extractedText.length} caracteres`);
+                        console.log(`📄 Número de páginas detectadas: ${pdfData.numpages || 'Desconocido'}`);
+                        
+                        // Log de una muestra del texto para debugging
+                        const sampleText = extractedText.substring(0, 500);
+                        console.log('📄 Muestra del texto extraído:', sampleText);
+                        
+                        if (extractedText.length < 100) {
+                            console.warn('⚠️ Texto extraído muy corto, puede haber problemas con el PDF');
+                        }
                     } catch (pdfError) {
                         console.error('❌ Error extrayendo PDF:', pdfError.message);
-                        // Si falla, usar texto básico pero no datos de ejemplo
                         extractedText = 'PDF procesado - contenido no extraíble';
                     }
                 } else {
@@ -427,14 +435,20 @@ module.exports = async (req, res) => {
                 }
 
                 // Extraer datos
+                console.log('🔍 Iniciando extracción con IA...');
                 const extractedData = await extractWithAI(extractedText, requestedFields);
+                console.log('📊 Datos extraídos:', extractedData.length, 'campos');
 
                 if (extractedData.length === 0) {
+                    console.error('❌ No se pudieron extraer datos del archivo');
                     return res.status(500).json({
                         success: false,
                         error: 'No se pudieron extraer datos del archivo'
                     });
                 }
+
+                // Log de los primeros datos para debugging
+                console.log('📋 Primeros 3 datos extraídos:', extractedData.slice(0, 3));
 
                 // Generar Excel
                 const excelBuffer = generateExcel(extractedData);
