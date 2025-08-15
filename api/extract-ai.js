@@ -51,6 +51,7 @@ Reglas:
 - NO incluyas texto adicional, solo el JSON`;
 
         console.log('🤖 Enviando prompt a Gemini...');
+        console.log('📝 Prompt enviado (primeros 500 chars):', prompt.substring(0, 500));
         const startTime = Date.now();
         
         let aiResponse;
@@ -60,6 +61,7 @@ Reglas:
             console.log(`⚡ Gemini respondió en ${endTime - startTime}ms`);
             const response = await result.response;
             aiResponse = response.text();
+            console.log('🤖 Respuesta de Gemini (primeros 500 chars):', aiResponse.substring(0, 500));
         } catch (geminiError) {
             console.error('❌ Error en Gemini:', geminiError.message);
             console.log('🔄 Usando extracción manual como fallback...');
@@ -454,12 +456,16 @@ module.exports = async (req, res) => {
                         const pdfParse = require('pdf-parse');
                         const pdfData = await pdfParse(file.buffer);
                         extractedText = pdfData.text;
-                        console.log(`📄 Texto extraído del PDF: ${extractedText.length} caracteres`);
-                        console.log(`📄 Número de páginas detectadas: ${pdfData.numpages || 'Desconocido'}`);
-                        
-                        // Log de una muestra del texto para debugging
-                        const sampleText = extractedText.substring(0, 500);
-                        console.log('📄 Muestra del texto extraído:', sampleText);
+                                        console.log(`📄 Texto extraído del PDF: ${extractedText.length} caracteres`);
+                console.log(`📄 Número de páginas detectadas: ${pdfData.numpages || 'Desconocido'}`);
+                
+                // Log de una muestra del texto para debugging
+                const sampleText = extractedText.substring(0, 1000);
+                console.log('📄 Muestra del texto extraído (primeros 1000 chars):', sampleText);
+                
+                // Buscar cantidades específicas en el texto para verificar
+                const quantityMatches = extractedText.match(/(\d+)\s+UND/gi);
+                console.log('🔍 Cantidades encontradas en el texto:', quantityMatches);
                         
                         if (extractedText.length < 100) {
                             console.warn('⚠️ Texto extraído muy corto, puede haber problemas con el PDF');
@@ -472,10 +478,10 @@ module.exports = async (req, res) => {
                     extractedText = file.buffer.toString('utf8');
                 }
 
-                // Extraer datos
-                console.log('🔍 Iniciando extracción con IA...');
-                const extractedData = await extractWithAI(extractedText, requestedFields);
-                console.log('📊 Datos extraídos:', extractedData.length, 'campos');
+                        // Extraer datos con IA
+        console.log('🔍 Iniciando extracción con IA...');
+        const extractedData = await extractWithAI(extractedText, requestedFields);
+        console.log('📊 Datos extraídos:', extractedData.length, 'campos');
 
                 if (extractedData.length === 0) {
                     console.error('❌ No se pudieron extraer datos del archivo');
