@@ -35,28 +35,16 @@ async function extractWithAI(text, requestedFields) {
             }
         });
 
-        const prompt = `Extrae los siguientes campos de cada fila del documento:
-1. ID de carga (formato: CG-XXXXXX)
-2. Número de orden (formato: CPOV-XXXXXX)
-3. Nombre de artículo (nombre completo del producto)
-4. Cantidad (como número entero, sin letras como 'UND')
+        const prompt = `Extrae los siguientes campos del documento:
+- ID de carga
+- Número de orden
+- Nombre de artículo
+- Cantidad
 
 Documento: ${text.substring(0, 15000)}
 
-IMPORTANTE: Responde SOLO con UN objeto JSON en este formato exacto:
-{"campos": [{"nombre": "campo", "valor": "valor"}]}
-
-Ejemplo del formato esperado:
-| ID de carga | Número de orden | Nombre de artículo | Cantidad |
-| CG-00014961 | CPOV-000009605 | TUBOS PVC SCH 40 3/4" | 18 |
-
-Reglas:
-- Extrae SOLO campos solicitados
-- Números de orden: valores únicos
-- ID de carga: puede repetirse
-- Cantidades: Extrae solo el número (sin UND, unidades, etc.)
-- Extrae TODOS los artículos sin omitir
-- NO incluyas texto adicional, solo el JSON`;
+Responde SOLO con un JSON en este formato:
+{"campos": [{"nombre": "campo", "valor": "valor"}]}`;
 
         console.log('🤖 Enviando prompt a Gemini...');
         console.log('📝 Prompt enviado (primeros 500 chars):', prompt.substring(0, 500));
@@ -179,29 +167,6 @@ function extractFieldsManually(text, requestedFields) {
                 }
             });
         } else if (fieldLower.includes('cantidad')) {
-            // Función para limpiar cantidades problemáticas
-            const cleanQuantity = (quantity) => {
-                let cleaned = quantity.trim();
-                console.log(`🔍 Limpiando cantidad: "${cleaned}"`);
-                
-                // Casos específicos conocidos (solo para las primeras órdenes) - VERCEL CACHE FIX
-                const specificCases = {
-                    '118 UND': '18 UND',      // Caso específico para CPOV-000009605
-                    '1400 UND': '400 UND',  // Caso específico para CPOV-000009795
-                    '1160 UND': '160 UND',  // Caso específico para CPOV-000009797
-                    '1150 UND': '150 UND'   // Caso específico para CPOV-000009866
-                };
-                
-                if (specificCases[cleaned]) {
-                    console.log(`🧹 Caso específico corregido: "${cleaned}" -> "${specificCases[cleaned]}"`);
-                    cleaned = specificCases[cleaned];
-                } else {
-                    console.log(`✅ Cantidad sin cambios: "${cleaned}"`);
-                }
-                
-                return cleaned;
-            };
-            
             // Buscar cantidades con diferentes formatos
             const quantityPatterns = [
                 /\d+\s+(?:UND|UNIDADES|PCS|PIEZAS)/gi,
@@ -216,10 +181,7 @@ function extractFieldsManually(text, requestedFields) {
                 const matches = text.match(pattern);
                 if (matches) {
                     matches.forEach(match => {
-                        console.log(`🔍 Cantidad encontrada antes de limpiar: "${match}"`);
-                        const cleanedQuantity = cleanQuantity(match);
-                        results.push({ nombre: field, valor: cleanedQuantity });
-                        console.log(`✅ Cantidad final agregada: "${cleanedQuantity}"`);
+                        results.push({ nombre: field, valor: match.trim() });
                     });
                 }
             });
@@ -230,9 +192,7 @@ function extractFieldsManually(text, requestedFields) {
                 numberOnlyMatches.forEach(match => {
                     const num = parseInt(match.trim());
                     if (num > 0 && num <= 9999) { // Filtrar números razonables
-                        const cleanedQuantity = cleanQuantity(match);
-                        results.push({ nombre: field, valor: cleanedQuantity });
-                        console.log(`✅ Encontrado cantidad (solo número): ${cleanedQuantity}`);
+                        results.push({ nombre: field, valor: match.trim() });
                     }
                 });
             }
@@ -567,30 +527,7 @@ module.exports = async (req, res) => {
                     console.log(`${index + 1}. ${item.nombre || item.label}: "${item.valor || item.value}"`);
                 });
                 
-                // Lógica post-IA para corregir cantidades sospechosas
-                console.log('🔧 Aplicando corrección post-IA...');
-                const datosCorregidos = extractedData.map(item => {
-                    if (item.nombre && item.nombre.toLowerCase().includes('cantidad')) {
-                        let valor = item.valor || item.value;
-                        
-                        // Casos específicos conocidos
-                        const correcciones = {
-                            '118': '18',
-                            '1400': '400',
-                            '1160': '160',
-                            '1150': '150'
-                        };
-                        
-                        if (correcciones[valor]) {
-                            console.log(`🧹 Corrección post-IA: "${valor}" -> "${correcciones[valor]}"`);
-                            return { ...item, valor: correcciones[valor] };
-                        }
-                    }
-                    return item;
-                });
-                
-                console.log('✅ Datos corregidos post-IA:', datosCorregidos.length, 'campos');
-                return datosCorregidos;
+                return extractedData;
 
                 // Generar Excel
                 const excelBuffer = generateExcel(extractedData);
