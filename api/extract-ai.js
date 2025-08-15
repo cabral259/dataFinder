@@ -44,10 +44,13 @@ IMPORTANTE: Responde SOLO con UN objeto JSON en este formato exacto:
 
 Reglas:
 - Extrae SOLO campos solicitados
-- Números de orden: valores únicos
-- ID de carga: puede repetirse
-- Cantidades: CADA instancia individual (no agrupar)
-- Extrae TODOS los artículos sin omitir
+- Números de orden: valores únicos (formato CPOV-XXXXXX)
+- ID de carga: puede repetirse (formato CG-XXXXXX)
+- Cantidades: Extrae CADA cantidad individual con su formato completo
+- Nombres de artículo: Extrae el nombre completo del artículo
+- Extrae TODOS los artículos sin omitir NINGUNO
+- Para cantidades: Busca patrones como "18 UND", "1400 UND", "15 UND"
+- Si no encuentras "UND", extrae solo el número
 - NO incluyas texto adicional, solo el JSON`;
 
         console.log('🤖 Enviando prompt a Gemini...');
@@ -169,11 +172,14 @@ function extractFieldsManually(text, requestedFields) {
                 }
             });
         } else if (fieldLower.includes('cantidad')) {
-            // Buscar cantidades
+            // Buscar cantidades con diferentes formatos
             const quantityPatterns = [
                 /\d+\s+(?:UND|UNIDADES|PCS|PIEZAS)/gi,
                 /(?:Cantidad|Quantity):\s*(\d+)/gi,
-                /(\d+)\s+UND/gi
+                /(\d+)\s+UND/gi,
+                /(\d+)\s+UNIDADES/gi,
+                /(\d+)\s+PCS/gi,
+                /(\d+)\s+PIEZAS/gi
             ];
             
             quantityPatterns.forEach(pattern => {
@@ -186,12 +192,15 @@ function extractFieldsManually(text, requestedFields) {
                 }
             });
             
-            // Buscar cantidades en formato específico del documento
-            const specificQuantityMatches = text.match(/(\d+)\s+UND/gi);
-            if (specificQuantityMatches) {
-                specificQuantityMatches.forEach(match => {
-                    results.push({ nombre: field, valor: match.trim() });
-                    console.log(`✅ Encontrado cantidad específica: ${match.trim()}`);
+            // Buscar cantidades sin unidades (solo números)
+            const numberOnlyMatches = text.match(/(?<=\s)(\d{1,4})(?=\s|$)/gi);
+            if (numberOnlyMatches) {
+                numberOnlyMatches.forEach(match => {
+                    const num = parseInt(match.trim());
+                    if (num > 0 && num <= 9999) { // Filtrar números razonables
+                        results.push({ nombre: field, valor: match.trim() });
+                        console.log(`✅ Encontrado cantidad (solo número): ${match.trim()}`);
+                    }
                 });
             }
         }
