@@ -778,129 +778,83 @@ async function generateExcel(fileName, structuredData, fullText) {
     // Crear tabla horizontal con columnas separadas
     const allData = [];
     
-        // Crear registros basados en la estructura de datos extraídos
-    const records = [];
-    const loadId = groupedData['ID de carga']?.[0] || '';
-    
-    if (structuredData && structuredData.length > 0) {
-        // Procesar los datos secuencialmente para mantener las relaciones exactas
-        let currentOrder = '';
-        let currentShipment = '';
-        let currentArticleCode = '';
-        let currentArticleName = '';
-        let currentQuantities = [];
+                // Crear registros basados en la estructura de datos extraídos
+        const records = [];
+        const loadId = groupedData['ID de carga']?.[0] || '';
         
-        for (let i = 0; i < structuredData.length; i++) {
-            const item = structuredData[i];
-            const label = item.label || item.nombre || '';
-            const value = item.value || item.valor || '';
+        if (structuredData && structuredData.length > 0) {
+            // Procesar los datos secuencialmente para mantener las relaciones exactas
+            let currentOrder = '';
+            let currentArticleName = '';
+            let currentQuantities = [];
             
-            if (label.toLowerCase().includes('número de orden') || label.toLowerCase().includes('numero de orden')) {
-                // Si tenemos datos acumulados, crear registros
-                if (currentOrder && currentShipment && currentArticleCode) {
-                    if (currentQuantities.length === 0) {
-                        records.push({
-                            loadId: loadId,
-                            shipmentId: currentShipment,
-                            orderNumber: currentOrder,
-                            articleCode: currentArticleCode,
-                            articleName: currentArticleName,
-                            quantity: ''
-                        });
-                    } else {
-                        // Crear un registro por cada cantidad
-                        for (const quantity of currentQuantities) {
+            for (let i = 0; i < structuredData.length; i++) {
+                const item = structuredData[i];
+                const label = item.label || item.nombre || '';
+                const value = item.value || item.valor || '';
+                
+                if (label.toLowerCase().includes('número de orden') || label.toLowerCase().includes('numero de orden')) {
+                    // Si tenemos datos acumulados, crear registros
+                    if (currentOrder && currentArticleName) {
+                        if (currentQuantities.length === 0) {
                             records.push({
                                 loadId: loadId,
-                                shipmentId: currentShipment,
                                 orderNumber: currentOrder,
-                                articleCode: currentArticleCode,
                                 articleName: currentArticleName,
-                                quantity: quantity
+                                quantity: ''
                             });
+                        } else {
+                            // Crear un registro por cada cantidad
+                            for (const quantity of currentQuantities) {
+                                records.push({
+                                    loadId: loadId,
+                                    orderNumber: currentOrder,
+                                    articleName: currentArticleName,
+                                    quantity: quantity
+                                });
+                            }
                         }
                     }
+                    
+                    // Iniciar nuevo registro
+                    currentOrder = value;
+                    currentArticleName = '';
+                    currentQuantities = [];
+                    
+                } else if (label.toLowerCase().includes('nombre de artículo') || label.toLowerCase().includes('nombre de articulo')) {
+                    currentArticleName = value;
+                } else if (label.toLowerCase().includes('cantidad')) {
+                    currentQuantities.push(value);
                 }
-                
-                // Iniciar nuevo registro
-                currentOrder = value;
-                currentShipment = '';
-                currentArticleCode = '';
-                currentArticleName = '';
-                currentQuantities = [];
-                
-            } else if (label.toLowerCase().includes('id del envío') || label.toLowerCase().includes('id del envio')) {
-                currentShipment = value;
-            } else if (label.toLowerCase().includes('código artículo') || label.toLowerCase().includes('codigo articulo')) {
-                // Si encontramos un nuevo código de artículo, procesar el registro anterior
-                if (currentOrder && currentShipment && currentArticleCode) {
-                    if (currentQuantities.length === 0) {
-                        records.push({
-                            loadId: loadId,
-                            shipmentId: currentShipment,
-                            orderNumber: currentOrder,
-                            articleCode: currentArticleCode,
-                            articleName: currentArticleName,
-                            quantity: ''
-                        });
-                    } else {
-                        // Crear un registro por cada cantidad
-                        for (const quantity of currentQuantities) {
-                            records.push({
-                                loadId: loadId,
-                                shipmentId: currentShipment,
-                                orderNumber: currentOrder,
-                                articleCode: currentArticleCode,
-                                articleName: currentArticleName,
-                                quantity: quantity
-                            });
-                        }
-                    }
-                }
-                
-                // Iniciar nuevo artículo
-                currentArticleCode = value;
-                currentArticleName = '';
-                currentQuantities = [];
-                
-            } else if (label.toLowerCase().includes('nombre de artículo') || label.toLowerCase().includes('nombre de articulo')) {
-                currentArticleName = value;
-            } else if (label.toLowerCase().includes('cantidad')) {
-                currentQuantities.push(value);
             }
-        }
-        
-        // Procesar el último registro
-        if (currentOrder && currentShipment && currentArticleCode) {
-            if (currentQuantities.length === 0) {
-                records.push({
-                    loadId: loadId,
-                    shipmentId: currentShipment,
-                    orderNumber: currentOrder,
-                    articleCode: currentArticleCode,
-                    articleName: currentArticleName,
-                    quantity: ''
-                });
-            } else {
-                // Crear un registro por cada cantidad
-                for (const quantity of currentQuantities) {
+            
+            // Procesar el último registro
+            if (currentOrder && currentArticleName) {
+                if (currentQuantities.length === 0) {
                     records.push({
                         loadId: loadId,
-                        shipmentId: currentShipment,
                         orderNumber: currentOrder,
-                        articleCode: currentArticleCode,
                         articleName: currentArticleName,
-                        quantity: quantity
+                        quantity: ''
                     });
+                } else {
+                    // Crear un registro por cada cantidad
+                    for (const quantity of currentQuantities) {
+                        records.push({
+                            loadId: loadId,
+                            orderNumber: currentOrder,
+                            articleName: currentArticleName,
+                            quantity: quantity
+                        });
+                    }
                 }
             }
         }
-    }
     
     console.log('📊 Registros agrupados:', records);
     
     // Crear encabezados
-    const headers = ['ID de carga', 'ID del envío', 'Número de orden', 'Código artículo', 'Nombre de artículo', 'Cantidad'];
+    const headers = ['ID de carga', 'Número de orden', 'Nombre de artículo', 'Cantidad'];
     allData.push(headers);
     
     // Crear filas de datos
@@ -908,9 +862,7 @@ async function generateExcel(fileName, structuredData, fullText) {
         records.forEach(record => {
             const row = [
                 record.loadId,
-                record.shipmentId,
                 record.orderNumber,
-                record.articleCode,
                 record.articleName,
                 record.quantity
             ];
@@ -918,19 +870,17 @@ async function generateExcel(fileName, structuredData, fullText) {
         });
     } else {
         // Si no hay registros, agregar una fila vacía
-        allData.push(['', '', '', '', '', '']);
+        allData.push(['', '', '', '']);
     }
     
     console.log('📊 Tabla final:', allData);
     
     const mainWorksheet = XLSX.utils.aoa_to_sheet(allData);
     
-    // Aplicar estilos básicos con anchos fijos para las 6 columnas
+    // Aplicar estilos básicos con anchos fijos para las 4 columnas
     mainWorksheet['!cols'] = [
         { width: 20 },  // ID de carga
-        { width: 20 },  // ID del envío
         { width: 25 },  // Número de orden
-        { width: 15 },  // Código artículo
         { width: 50 },  // Nombre de artículo
         { width: 15 }   // Cantidad
     ];
