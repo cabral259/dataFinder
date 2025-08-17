@@ -48,40 +48,52 @@ async function extractTextFromPDF(buffer) {
                 const page = await pdf.getPage(pageNum);
                 const textContent = await page.getTextContent();
                 
-                // Concatenar el texto de la página con mejor preservación de estructura
+                // Concatenar el texto de la página preservando mejor la estructura
                 let pageText = '';
+                let lastY = null;
+                let lineSpacing = 0;
                 
-                // Método mejorado para preservar líneas
-                const textItems = textContent.items.map(item => ({
-                    text: item.str || '',
-                    x: item.transform[4],
-                    y: item.transform[5],
-                    width: item.width || 0
-                }));
-                
-                // Agrupar por posición Y (líneas)
-                const lineGroups = {};
-                textItems.forEach(item => {
-                    const yKey = Math.round(item.y * 100) / 100; // Redondear para agrupar líneas similares
-                    if (!lineGroups[yKey]) {
-                        lineGroups[yKey] = [];
+                // Calcular el espaciado promedio entre líneas
+                const yPositions = textContent.items.map(item => item.transform[5]).sort((a, b) => b - a);
+                if (yPositions.length > 1) {
+                    const differences = [];
+                    for (let i = 0; i < yPositions.length - 1; i++) {
+                        differences.push(yPositions[i] - yPositions[i + 1]);
                     }
-                    lineGroups[yKey].push(item);
-                });
+                    lineSpacing = differences.reduce((a, b) => a + b, 0) / differences.length;
+                }
                 
-                // Ordenar líneas por posición Y (de arriba a abajo)
-                const sortedYKeys = Object.keys(lineGroups).sort((a, b) => parseFloat(b) - parseFloat(a));
-                
-                // Construir líneas ordenadas por posición X dentro de cada línea
+                // Agrupar elementos por línea basándose en la posición Y
                 const lines = [];
-                sortedYKeys.forEach(yKey => {
-                    const lineItems = lineGroups[yKey].sort((a, b) => a.x - b.x);
-                    const lineText = lineItems.map(item => item.text).join(' ').trim();
+                let currentLine = [];
+                
+                textContent.items.forEach(item => {
+                    const currentY = item.transform[5];
                     
-                    if (lineText.length > 0) {
-                        lines.push(lineText);
+                    if (lastY === null) {
+                        currentLine.push(item.str || '');
+                    } else {
+                        const yDiff = Math.abs(lastY - currentY);
+                        
+                        // Si la diferencia en Y es menor que el espaciado de línea, es la misma línea
+                        if (yDiff < lineSpacing * 0.5) {
+                            currentLine.push(item.str || '');
+                        } else {
+                            // Nueva línea
+                            if (currentLine.length > 0) {
+                                lines.push(currentLine.join(' '));
+                            }
+                            currentLine = [item.str || ''];
+                        }
                     }
+                    
+                    lastY = currentY;
                 });
+                
+                // Agregar la última línea
+                if (currentLine.length > 0) {
+                    lines.push(currentLine.join(' '));
+                }
                 
                 pageText = lines.join('\n');
                 extractedText += pageText + '\n';
@@ -195,42 +207,8 @@ async function extractWithAI(text, requestedFields) {
             }
         });
 
-        // Función para reconstruir líneas si el texto está fusionado
-        function reconstructLines(text) {
-            const lines = text.split(/\r?\n/).filter(line => line.trim().length > 0);
-            
-            // Si hay pocas líneas, intentar reconstruir basándose en patrones
-            if (lines.length < 5) {
-                console.log('⚠️ Pocas líneas detectadas, intentando reconstruir...');
-                
-                // Buscar patrones de inicio de línea
-                const lineStartPattern = /(CG-\d+)/g;
-                const matches = [...text.matchAll(lineStartPattern)];
-                
-                if (matches.length > 0) {
-                    const reconstructedLines = [];
-                    for (let i = 0; i < matches.length; i++) {
-                        const startIndex = matches[i].index;
-                        const endIndex = i < matches.length - 1 ? matches[i + 1].index : text.length;
-                        const line = text.substring(startIndex, endIndex).trim();
-                        
-                        if (line.length > 10) {
-                            reconstructedLines.push(line);
-                        }
-                    }
-                    
-                    if (reconstructedLines.length > 0) {
-                        console.log(`✅ Reconstruidas ${reconstructedLines.length} líneas`);
-                        return reconstructedLines;
-                    }
-                }
-            }
-            
-            return lines;
-        }
-        
         // Procesar el texto línea por línea antes de enviarlo a Gemini
-        const lines = reconstructLines(text);
+        const lines = text.split(/\r?\n/).filter(line => line.trim().length > 0);
         console.log(`📄 Procesando ${lines.length} líneas para Gemini`);
         
         // Filtrar solo líneas relevantes que contengan información de artículos
@@ -394,6 +372,21 @@ function extractFieldsManually(text, requestedFields) {
     console.log('🔍 Iniciando extracción manual...');
     console.log('📄 Longitud del texto a procesar:', text.length);
     console.log('📋 Campos solicitados:', requestedFields);
+    
+    // Procesar el texto línea por línea
+    const lines = text.split(/\r?\n/).filter(line => line.trim().length > 0);
+    console.log(`📄 Procesando ${lines.length} líneas manualmente`);
+    
+    // Filtrar solo líneas relevantes
+    const relevantLines = lines.filter(line => 
+        line.includes('TUBOS PVC') || 
+        line.includes('CORVI-SONACA') || 
+        line.includes('CPOV-') || 
+        line.includes('CG-')
+    );
+    
+    console.log(`📄 Líneas relevantes para extracción manual: ${relevantLines.length}`);
+    
     const results = [];
 
     requestedFields.forEach(field => {
@@ -456,17 +449,13 @@ function extractFieldsManually(text, requestedFields) {
         } else if (fieldLower.includes('cantidad')) {
             console.log('🔍 Iniciando búsqueda de cantidades con procesamiento línea por línea...');
             
-            // Procesar el texto línea por línea para evitar fusiones
-            const lines = text.split(/\r?\n/).filter(line => line.trim().length > 0);
-            console.log(`📄 Procesando ${lines.length} líneas del documento`);
-            
             const foundQuantities = new Set(); // Evitar duplicados
             const quantityResults = [];
             
             // Patrón específico para cantidades con word boundaries
             const quantityPattern = /\b(\d{1,4})\s*UND\b/gi;
             
-            lines.forEach((line, lineIndex) => {
+            relevantLines.forEach((line, lineIndex) => {
                 // Solo procesar líneas que contengan "TUBOS PVC" para asegurar contexto correcto
                 if (line.includes('TUBOS PVC') || line.includes('CORVI-SONACA')) {
                     console.log(`🔍 Procesando línea ${lineIndex + 1}: "${line.trim()}"`);
