@@ -1,7 +1,6 @@
 const multer = require('multer');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const XLSX = require('xlsx');
-const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.mjs');
 
 // Configuración de multer para Vercel
 const upload = multer({
@@ -14,175 +13,30 @@ const upload = multer({
 // Configuración de Gemini
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// Función mejorada para extraer texto de PDF usando pdfjs-dist
-async function extractTextFromPDF(buffer) {
-    try {
-        console.log('📄 Iniciando extracción con pdfjs-dist...');
-        
-        // Configurar el worker de pdfjs-dist para Vercel
-        const pdfjsWorker = require('pdfjs-dist/legacy/build/pdf.worker.mjs');
-        pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
-        
-        // Cargar el PDF
-        const loadingTask = pdfjsLib.getDocument({
-            data: new Uint8Array(buffer),
-            disableFontFace: false,
-            standardFontDataUrl: null
-        });
-        
-        const pdf = await loadingTask.promise;
-        const numPages = pdf.numPages;
-        
-        console.log(`📄 PDF cargado: ${numPages} páginas detectadas`);
-        
-        // Limitar a 20 páginas para evitar timeouts en Vercel
-        const maxPages = Math.min(numPages, 20);
-        console.log(`📄 Procesando ${maxPages} páginas (limitado para Vercel)`);
-        
-        let extractedText = '';
-        
-        // Procesar páginas secuencialmente para mejor control
-        for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
-            try {
-                console.log(`📄 Procesando página ${pageNum}/${maxPages}...`);
-                const page = await pdf.getPage(pageNum);
-                const textContent = await page.getTextContent();
-                
-                // Concatenar el texto de la página preservando mejor la estructura
-                let pageText = '';
-                let lastY = null;
-                let lineSpacing = 0;
-                
-                // Calcular el espaciado promedio entre líneas
-                const yPositions = textContent.items.map(item => item.transform[5]).sort((a, b) => b - a);
-                if (yPositions.length > 1) {
-                    const differences = [];
-                    for (let i = 0; i < yPositions.length - 1; i++) {
-                        differences.push(yPositions[i] - yPositions[i + 1]);
-                    }
-                    lineSpacing = differences.reduce((a, b) => a + b, 0) / differences.length;
-                }
-                
-                // Agrupar elementos por línea basándose en la posición Y
-                const lines = [];
-                let currentLine = [];
-                
-                textContent.items.forEach(item => {
-                    const currentY = item.transform[5];
-                    
-                    if (lastY === null) {
-                        currentLine.push(item.str || '');
-                    } else {
-                        const yDiff = Math.abs(lastY - currentY);
-                        
-                        // Si la diferencia en Y es menor que el espaciado de línea, es la misma línea
-                        if (yDiff < lineSpacing * 0.5) {
-                            currentLine.push(item.str || '');
-                        } else {
-                            // Nueva línea
-                            if (currentLine.length > 0) {
-                                lines.push(currentLine.join(' '));
-                            }
-                            currentLine = [item.str || ''];
-                        }
-                    }
-                    
-                    lastY = currentY;
-                });
-                
-                // Agregar la última línea
-                if (currentLine.length > 0) {
-                    lines.push(currentLine.join(' '));
-                }
-                
-                pageText = lines.join('\n');
-                extractedText += pageText + '\n';
-                
-                // Log de progreso cada 5 páginas
-                if (pageNum % 5 === 0) {
-                    console.log(`📄 Progreso: ${pageNum}/${maxPages} páginas procesadas`);
-                }
-                
-            } catch (pageError) {
-                console.log(`⚠️ Error en página ${pageNum}: ${pageError.message}`);
-                continue;
-            }
-        }
-        
-        console.log(`📄 Extracción completada: ${extractedText.length} caracteres`);
-        return extractedText;
-        
-    } catch (error) {
-        console.error('❌ Error con pdfjs-dist:', error.message);
-        
-        // Fallback a pdf-parse si pdfjs-dist falla
-        try {
-            console.log('🔄 Intentando fallback con pdf-parse...');
-            const pdfParse = require('pdf-parse');
-            const pdfData = await pdfParse(buffer);
-            console.log(`📄 Fallback exitoso: ${pdfData.text.length} caracteres`);
-            return pdfData.text;
-        } catch (fallbackError) {
-            console.error('❌ Error en fallback:', fallbackError.message);
-            throw new Error('No se pudo extraer texto del PDF');
-        }
-    }
-}
-
-// Función mejorada para validar cantidades
-function validateQuantity(quantity, context = '') {
-    try {
-        // Limpiar la cantidad
-        const cleanQuantity = quantity.toString().trim();
-        
-        // Extraer solo números
-        const numericMatch = cleanQuantity.match(/(\d+)/);
-        if (!numericMatch) {
-            console.log(`⚠️ Cantidad inválida (sin números): "${quantity}"`);
-            return null;
-        }
-        
-        const numericValue = parseInt(numericMatch[1]);
-        
-        // Validaciones
-        if (numericValue <= 0) {
-            console.log(`⚠️ Cantidad inválida (≤ 0): "${quantity}"`);
-            return null;
-        }
-        
-        if (numericValue > 99999) {
-            console.log(`⚠️ Cantidad sospechosa (muy alta): "${quantity}"`);
-            return null;
-        }
-        
-        // Verificar contexto si está disponible
-        if (context) {
-            const contextLower = context.toLowerCase();
-            
-            // Si el contexto sugiere que es una cantidad válida
-            if (contextLower.includes('und') || 
-                contextLower.includes('unidades') || 
-                contextLower.includes('pcs') || 
-                contextLower.includes('piezas') ||
-                contextLower.includes('cantidad')) {
-                console.log(`✅ Cantidad validada con contexto: "${quantity}" -> ${numericValue}`);
-                return numericValue.toString();
-            }
-        }
-        
-        // Si no hay contexto, ser más estricto
-        if (numericValue >= 1 && numericValue <= 9999) {
-            console.log(`✅ Cantidad validada: "${quantity}" -> ${numericValue}`);
-            return numericValue.toString();
-        }
-        
-        console.log(`⚠️ Cantidad fuera de rango razonable: "${quantity}"`);
-        return null;
-        
-    } catch (error) {
-        console.log(`❌ Error validando cantidad "${quantity}":`, error.message);
-        return null;
-    }
+// Función de preprocesamiento de texto para mejorar extracción en Vercel
+function preprocessText(text) {
+    console.log('🔧 Preprocesando texto para Vercel...');
+    console.log('📄 Longitud original:', text.length);
+    
+    // Normalizar saltos de línea
+    let processedText = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    
+    // Separar por líneas y limpiar
+    const lines = processedText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+    
+    // Reconstruir el texto con líneas bien separadas
+    processedText = lines.join('\n');
+    
+    console.log('📄 Longitud procesada:', processedText.length);
+    console.log('📄 Número de líneas:', lines.length);
+    
+    // Log de muestra para debugging
+    console.log('📄 Muestra del texto procesado (primeras 3 líneas):');
+    lines.slice(0, 3).forEach((line, index) => {
+        console.log(`${index + 1}: "${line}"`);
+    });
+    
+    return processedText;
 }
 
 // Función de extracción con IA
@@ -191,6 +45,9 @@ async function extractWithAI(text, requestedFields) {
         console.log('🤖 Iniciando extracción con Gemini Flash...');
         console.log('📋 Campos solicitados:', requestedFields);
         console.log('📄 Longitud del texto:', text.length);
+
+        // Preprocesar el texto para Vercel
+        text = preprocessText(text);
 
         // Optimización: Limitar el tamaño del texto para mejor rendimiento (igual que local)
         const maxTextLength = 100000; // 100KB máximo (aumentado para archivos más grandes)
@@ -207,46 +64,23 @@ async function extractWithAI(text, requestedFields) {
             }
         });
 
-        // Procesar el texto línea por línea antes de enviarlo a Gemini
-        const lines = text.split(/\r?\n/).filter(line => line.trim().length > 0);
-        console.log(`📄 Procesando ${lines.length} líneas para Gemini`);
-        
-        // Filtrar solo líneas relevantes que contengan información de artículos
-        const relevantLines = lines.filter(line => 
-            line.includes('TUBOS PVC') || 
-            line.includes('CORVI-SONACA') || 
-            line.includes('CPOV-') || 
-            line.includes('CG-')
-        );
-        
-        console.log(`📄 Líneas relevantes encontradas: ${relevantLines.length}`);
-        
-        // Log de las líneas relevantes para debugging
-        console.log('📄 Líneas relevantes:');
-        relevantLines.forEach((line, index) => {
-            console.log(`${index + 1}. ${line}`);
-        });
-        
-        // Crear un prompt más específico con instrucciones claras
-        const prompt = `Extrae los siguientes campos del documento, procesando CADA LÍNEA POR SEPARADO:
+        const prompt = `Extrae los siguientes campos del documento, procesando línea por línea para evitar mezclar campos de diferentes filas:
 
-- ID de carga (formato: CG-XXXXXXX)
-- Número de orden (formato: CPOV-XXXXXXXXX)
-- Nombre de artículo (debe contener "TUBOS PVC" y "CORVI-SONACA")
-- Cantidad (solo números que estén en la MISMA LÍNEA que el artículo, seguidos de "UND")
+- ID de carga
+- Número de orden  
+- Nombre de artículo
+- Cantidad
 
-IMPORTANTE:
-1. Procesa cada línea individualmente
-2. La cantidad debe estar en la MISMA LÍNEA que el nombre del artículo
-3. NO mezcles cantidades de líneas diferentes
-4. Solo considera cantidades que estén claramente asociadas al artículo en esa línea específica
-5. Si una línea no tiene cantidad clara, omítela
+IMPORTANTE: 
+- Procesa cada línea individualmente
+- Para cantidades, busca solo números de 1-4 dígitos seguidos de "UND" o "UNIDADES"
+- NO mezcles números de orden (CPOV-) con cantidades
+- Solo incluye cantidades que estén claramente asociadas a artículos
 
-Documento (cada línea separada):
-${relevantLines.map((line, index) => `Línea ${index + 1}: ${line}`).join('\n')}
+Documento: ${text.substring(0, 15000)}
 
 Responde SOLO con un JSON en este formato:
-{"campos": [{"nombre": "campo", "valor": "valor", "linea": numero_linea}]}`;
+{"campos": [{"nombre": "campo", "valor": "valor"}]}`;
 
         console.log('🤖 Enviando prompt a Gemini...');
         console.log('📝 Prompt enviado (primeros 500 chars):', prompt.substring(0, 500));
@@ -286,108 +120,59 @@ Responde SOLO con un JSON en este formato:
                 if (parsedData.campos && Array.isArray(parsedData.campos)) {
                     console.log(`✅ Gemini extrajo ${parsedData.campos.length} campos`);
                     
-                    // Validar y limpiar los campos extraídos
-                    const validatedFields = [];
-                    const seenCombinations = new Set();
-                    
-                    parsedData.campos.forEach(field => {
-                        const fieldName = field.nombre || field.label || '';
-                        const fieldValue = field.valor || field.value || '';
-                        const lineNumber = field.linea || field.line || 0;
-                        
-                        // Validar que el campo tenga valor
-                        if (!fieldValue || fieldValue.trim() === '') {
-                            console.log(`⚠️ Campo vacío ignorado: ${fieldName}`);
-                            return;
-                        }
-                        
-                        // Para cantidades, aplicar validaciones adicionales
-                        if (fieldName.toLowerCase().includes('cantidad')) {
-                            const numericMatch = fieldValue.match(/(\d+)/);
-                            if (!numericMatch) {
-                                console.log(`⚠️ Cantidad inválida ignorada: ${fieldValue}`);
-                                return;
-                            }
-                            
-                            const numericValue = parseInt(numericMatch[1]);
-                            
-                            // Validar que la cantidad sea razonable
-                            if (numericValue <= 0 || numericValue > 99999) {
-                                console.log(`⚠️ Cantidad fuera de rango ignorada: ${fieldValue}`);
-                                return;
-                            }
-                            
-                            // Verificar que no sea parte de un número de orden
-                            if (numericValue > 500) {
-                                const originalLine = relevantLines[lineNumber - 1] || '';
-                                if (originalLine.includes('CPOV-')) {
-                                    const orderMatch = originalLine.match(/CPOV-(\d+)/);
-                                    if (orderMatch && orderMatch[1].includes(numericValue.toString())) {
-                                        console.log(`⚠️ Cantidad parece ser número de orden ignorada: ${fieldValue}`);
-                                        return;
-                                    }
+                    // Validar y limpiar los datos extraídos
+                    const validatedFields = parsedData.campos.filter(field => {
+                        if (field.nombre && field.valor) {
+                            // Validación específica para cantidades
+                            if (field.nombre.toLowerCase().includes('cantidad')) {
+                                const numValue = parseInt(field.valor);
+                                if (isNaN(numValue) || numValue <= 0 || numValue > 9999) {
+                                    console.log(`⚠️ Cantidad inválida descartada: ${field.valor}`);
+                                    return false;
                                 }
                             }
+                            return true;
                         }
-                        
-                        // Evitar duplicados basándose en nombre y valor
-                        const combination = `${fieldName}:${fieldValue}`;
-                        if (seenCombinations.has(combination)) {
-                            console.log(`⚠️ Campo duplicado ignorado: ${fieldName} = ${fieldValue}`);
-                            return;
-                        }
-                        seenCombinations.add(combination);
-                        
-                        validatedFields.push({
-                            nombre: fieldName,
-                            valor: fieldValue,
-                            linea: lineNumber
-                        });
-                        
-                        console.log(`✅ Campo validado: ${fieldName} = ${fieldValue} (línea ${lineNumber})`);
+                        return false;
                     });
                     
-                    console.log(`📊 Total de campos validados: ${validatedFields.length}`);
+                    console.log(`✅ ${validatedFields.length} campos válidos después de validación`);
                     return validatedFields;
                 } else {
                     console.log('⚠️ Respuesta de Gemini no tiene el formato esperado');
-                    return [];
+                    return extractFieldsManually(text, requestedFields);
                 }
             } else {
                 console.log('⚠️ No se encontró JSON válido en la respuesta');
-                return [];
+                return extractFieldsManually(text, requestedFields);
             }
         } catch (parseError) {
             console.log('⚠️ Error parseando JSON de Gemini:', parseError.message);
-            return [];
+            return extractFieldsManually(text, requestedFields);
         }
     } catch (error) {
         console.error('❌ Error en extracción con IA:', error);
-        return [];
+        return extractFieldsManually(text, requestedFields);
     }
 }
 
 // Función de extracción manual (fallback)
 function extractFieldsManually(text, requestedFields) {
-    console.log('🔍 Iniciando extracción manual...');
+    console.log('🔍 Iniciando extracción manual mejorada...');
     console.log('📄 Longitud del texto a procesar:', text.length);
     console.log('📋 Campos solicitados:', requestedFields);
     
-    // Procesar el texto línea por línea
-    const lines = text.split(/\r?\n/).filter(line => line.trim().length > 0);
-    console.log(`📄 Procesando ${lines.length} líneas manualmente`);
-    
-    // Filtrar solo líneas relevantes
-    const relevantLines = lines.filter(line => 
-        line.includes('TUBOS PVC') || 
-        line.includes('CORVI-SONACA') || 
-        line.includes('CPOV-') || 
-        line.includes('CG-')
-    );
-    
-    console.log(`📄 Líneas relevantes para extracción manual: ${relevantLines.length}`);
-    
     const results = [];
+    
+    // Separar el texto por líneas y limpiar
+    const lines = text.split(/\r?\n/).map(line => line.trim()).filter(line => line.length > 0);
+    console.log(`📄 Procesando ${lines.length} líneas del documento`);
+    
+    // Log de las primeras líneas para debugging
+    console.log('📄 Primeras 5 líneas del documento:');
+    lines.slice(0, 5).forEach((line, index) => {
+        console.log(`${index + 1}: "${line}"`);
+    });
 
     requestedFields.forEach(field => {
         const fieldLower = field.toLowerCase();
@@ -447,110 +232,106 @@ function extractFieldsManually(text, requestedFields) {
                 }
             });
         } else if (fieldLower.includes('cantidad')) {
-            console.log('🔍 Iniciando búsqueda de cantidades con procesamiento línea por línea...');
+            console.log('🔍 Procesando cantidades línea por línea...');
             
-            const foundQuantities = new Set(); // Evitar duplicados
-            const quantityResults = [];
-            
-            // Patrón específico para cantidades con word boundaries
-            const quantityPattern = /\b(\d{1,4})\s*UND\b/gi;
-            
-            relevantLines.forEach((line, lineIndex) => {
+            // Procesar cada línea individualmente para cantidades
+            lines.forEach((line, lineIndex) => {
                 // Solo procesar líneas que contengan "TUBOS PVC" para asegurar contexto correcto
-                if (line.includes('TUBOS PVC') || line.includes('CORVI-SONACA')) {
-                    console.log(`🔍 Procesando línea ${lineIndex + 1}: "${line.trim()}"`);
+                if (line.includes('TUBOS PVC') || line.includes('UND') || line.includes('UNIDADES')) {
+                    console.log(`📄 Procesando línea ${lineIndex + 1}: "${line}"`);
                     
-                    // Buscar cantidades en esta línea específica
+                    // Patrón más específico para cantidades: \b(\d{1,4})\s*UND\b
+                    const quantityPattern = /\b(\d{1,4})\s*UND\b/gi;
                     const matches = line.match(quantityPattern);
+                    
                     if (matches) {
-                        console.log(`✅ Línea ${lineIndex + 1} - Cantidades encontradas:`, matches);
-                        
                         matches.forEach(match => {
-                            // Extraer solo el número del match
-                            const numericMatch = match.match(/(\d+)/);
-                            if (numericMatch) {
-                                const quantity = numericMatch[1];
-                                const numericValue = parseInt(quantity);
+                            // Extraer solo el número
+                            const numberMatch = match.match(/(\d{1,4})/);
+                            if (numberMatch) {
+                                const quantity = numberMatch[1];
+                                const numValue = parseInt(quantity);
                                 
-                                // Validación cruzada para evitar confundir número de orden con cantidad
-                                if (numericValue > 500) {
+                                // Validación cruzada: descartar números sospechosos
+                                if (numValue > 0 && numValue <= 9999) {
                                     // Verificar que no sea un número de orden (CPOV-)
-                                    if (line.includes('CPOV-')) {
-                                        const orderMatch = line.match(/CPOV-(\d+)/);
-                                        if (orderMatch && orderMatch[1].includes(quantity)) {
-                                            console.log(`⚠️ Cantidad rechazada (parece ser número de orden): "${quantity}" en línea ${lineIndex + 1}`);
-                                            return;
-                                        }
+                                    if (!line.includes('CPOV-') || !line.match(/CPOV-\d+/)) {
+                                        results.push({ nombre: field, valor: quantity });
+                                        console.log(`✅ Cantidad válida encontrada en línea ${lineIndex + 1}: ${quantity} UND`);
+                                    } else {
+                                        console.log(`⚠️ Cantidad descartada (posible número de orden): ${quantity} en línea ${lineIndex + 1}`);
                                     }
-                                    
-                                    // Verificar que esté claramente junto al nombre del artículo
-                                    const articleContext = line.includes('CORVI-SONACA') || line.includes('TUBOS PVC');
-                                    if (!articleContext) {
-                                        console.log(`⚠️ Cantidad rechazada (sin contexto de artículo): "${quantity}" en línea ${lineIndex + 1}`);
-                                        return;
-                                    }
-                                }
-                                
-                                // Validación adicional: verificar que no esté en el contexto de un número de orden
-                                const beforeQuantity = line.substring(0, line.indexOf(match));
-                                const afterQuantity = line.substring(line.indexOf(match) + match.length);
-                                
-                                // Si hay un CPOV- cerca, verificar que no sea parte del número de orden
-                                if (beforeQuantity.includes('CPOV-')) {
-                                    const orderInBefore = beforeQuantity.match(/CPOV-(\d+)/);
-                                    if (orderInBefore && orderInBefore[1].endsWith(quantity)) {
-                                        console.log(`⚠️ Cantidad rechazada (parte de número de orden): "${quantity}" en línea ${lineIndex + 1}`);
-                                        return;
-                                    }
-                                }
-                                
-                                // Validar la cantidad con contexto completo de la línea
-                                const validatedQuantity = validateQuantity(quantity, line);
-                                
-                                if (validatedQuantity && !foundQuantities.has(validatedQuantity)) {
-                                    foundQuantities.add(validatedQuantity);
-                                    quantityResults.push({ 
-                                        nombre: field, 
-                                        valor: validatedQuantity,
-                                        context: line.trim(),
-                                        lineNumber: lineIndex + 1
-                                    });
-                                    console.log(`✅ Cantidad agregada: "${validatedQuantity}" (línea ${lineIndex + 1})`);
-                                    console.log(`📄 Contexto completo: "${line.trim()}"`);
-                                } else if (!validatedQuantity) {
-                                    console.log(`⚠️ Cantidad rechazada por validación: "${quantity}" en línea ${lineIndex + 1}`);
                                 } else {
-                                    console.log(`⚠️ Cantidad duplicada: "${quantity}" en línea ${lineIndex + 1}`);
+                                    console.log(`⚠️ Cantidad fuera de rango: ${quantity} en línea ${lineIndex + 1}`);
                                 }
                             }
                         });
-                    } else {
-                        console.log(`❌ Línea ${lineIndex + 1} - No se encontraron cantidades`);
                     }
-                } else {
-                    console.log(`⏭️ Línea ${lineIndex + 1} - Saltada (sin contexto de TUBOS PVC)`);
+                    
+                    // Buscar también cantidades sin "UND" pero con contexto de artículo
+                    const numberOnlyPattern = /\b(\d{1,4})\b/gi;
+                    const numberMatches = line.match(numberOnlyPattern);
+                    
+                    if (numberMatches && line.includes('TUBOS PVC')) {
+                        numberMatches.forEach(match => {
+                            const numValue = parseInt(match);
+                            
+                            // Validación más estricta para números sin "UND"
+                            if (numValue > 0 && numValue <= 9999) {
+                                // Verificar que no sea parte de un número de orden
+                                const orderPattern = /CPOV-\d+/;
+                                if (!orderPattern.test(line)) {
+                                    // Verificar que esté cerca del nombre del artículo
+                                    const articleIndex = line.indexOf('TUBOS PVC');
+                                    const numberIndex = line.indexOf(match);
+                                    
+                                    // Si el número está después del artículo, es probablemente una cantidad
+                                    if (numberIndex > articleIndex) {
+                                        results.push({ nombre: field, valor: match });
+                                        console.log(`✅ Cantidad inferida en línea ${lineIndex + 1}: ${match}`);
+                                    }
+                                }
+                            }
+                        });
+                    }
                 }
             });
             
-            // Agregar las cantidades válidas a los resultados
-            results.push(...quantityResults);
-            
-            // Log final de cantidades encontradas
-            console.log(`📊 Total de cantidades únicas encontradas: ${foundQuantities.size}`);
-            console.log(`📋 Cantidades:`, Array.from(foundQuantities).sort((a, b) => parseInt(a) - parseInt(b)));
-            
-            // Log detallado de cada cantidad encontrada
-            console.log('📋 Detalles de cantidades encontradas:');
-            quantityResults.forEach((result, index) => {
-                console.log(`${index + 1}. Cantidad: "${result.valor}" (línea ${result.lineNumber})`);
-                console.log(`   Contexto: "${result.context}"`);
-            });
+            // Si no se encontraron cantidades con el método específico, usar fallback
+            if (results.filter(r => r.nombre === field).length === 0) {
+                console.log('🔄 Usando método de fallback para cantidades...');
+                
+                const quantityPatterns = [
+                    /\b(\d{1,4})\s+UND\b/gi,
+                    /\b(\d{1,4})\s+UNIDADES\b/gi,
+                    /\b(\d{1,4})\s+PCS\b/gi,
+                    /(?:Cantidad|Quantity):\s*(\d{1,4})/gi
+                ];
+                
+                quantityPatterns.forEach(pattern => {
+                    const matches = text.match(pattern);
+                    if (matches) {
+                        matches.forEach(match => {
+                            const numberMatch = match.match(/(\d{1,4})/);
+                            if (numberMatch) {
+                                const quantity = numberMatch[1];
+                                const numValue = parseInt(quantity);
+                                
+                                if (numValue > 0 && numValue <= 9999) {
+                                    results.push({ nombre: field, valor: quantity });
+                                    console.log(`✅ Cantidad de fallback: ${quantity}`);
+                                }
+                            }
+                        });
+                    }
+                });
+            }
         }
     });
 
     console.log(`📊 Total de campos encontrados manualmente: ${results.length}`);
-                    console.log('📋 Resultados finales de extracción manual:', results);
-                return results;
+    console.log('📋 Resultados finales de extracción manual:', results);
+    return results;
 }
 
 // Función para generar Excel
@@ -804,80 +585,61 @@ module.exports = async (req, res) => {
                 const file = files[0];
                 
                 if (file.mimetype === 'application/pdf') {
-                    // Para PDF, usar extracción mejorada con pdfjs-dist
+                    // Para PDF, usar extracción mejorada
                     try {
-                        console.log('📄 Procesando archivo PDF con pdfjs-dist...');
-                        console.log(`📄 Tamaño del archivo: ${file.size} bytes`);
-                        
-                        extractedText = await extractTextFromPDF(file.buffer);
+                        console.log('📄 Procesando archivo PDF...');
+                        const pdfParse = require('pdf-parse');
+                        const pdfData = await pdfParse(file.buffer);
+                        extractedText = pdfData.text;
                         
                         console.log(`📄 Texto extraído del PDF: ${extractedText.length} caracteres`);
+                        console.log(`📄 Número de páginas detectadas: ${pdfData.numpages || 'Desconocido'}`);
                         
-                        // Log detallado del texto extraído para debugging
-                        const sampleText = extractedText.substring(0, 2000);
-                        console.log('📄 Muestra del texto extraído (primeros 2000 chars):');
-                        console.log('='.repeat(80));
-                        console.log(sampleText);
-                        console.log('='.repeat(80));
+                        // Log de una muestra del texto para debugging
+                        const sampleText = extractedText.substring(0, 1000);
+                        console.log('📄 Muestra del texto extraído (primeros 1000 chars):', sampleText);
                         
-                        // Análisis específico de cantidades en el texto extraído
-                        console.log('🔍 Análisis detallado de cantidades en el texto:');
+                        // Buscar cantidades específicas en el texto para verificar
+                        const quantityMatches = extractedText.match(/\b(\d{1,4})\s*UND\b/gi);
+                        console.log('🔍 Cantidades encontradas en el texto:', quantityMatches);
                         
-                        // Buscar patrones específicos de cantidades
-                        const undPattern = extractedText.match(/(\d+)\s+UND/gi);
-                        const unidadesPattern = extractedText.match(/(\d+)\s+UNIDADES/gi);
-                        const pcsPattern = extractedText.match(/(\d+)\s+PCS/gi);
-                        const piezasPattern = extractedText.match(/(\d+)\s+PIEZAS/gi);
+                        // Buscar patrones problemáticos que puedan estar causando el "1" extra
+                        const problematicPatterns = extractedText.match(/(?:1\s*)?(\d+)\s+UND/gi);
+                        console.log('⚠️ Patrones problemáticos encontrados:', problematicPatterns);
                         
-                        console.log('🔍 Cantidades con UND:', undPattern);
-                        console.log('🔍 Cantidades con UNIDADES:', unidadesPattern);
-                        console.log('🔍 Cantidades con PCS:', pcsPattern);
-                        console.log('🔍 Cantidades con PIEZAS:', piezasPattern);
+                        // Buscar números que empiecen con 1 seguidos de otros números
+                        const onePattern = extractedText.match(/1(\d+)\s+UND/gi);
+                        console.log('🔍 Números que empiezan con 1:', onePattern);
                         
-                        // Buscar números de orden para contexto
-                        const orderNumbers = extractedText.match(/CPOV-\d+/gi);
-                        console.log('🔍 Números de orden encontrados:', orderNumbers);
+                        // Buscar la sección problemática específicamente
+                        const beforeSection = extractedText.substring(0, extractedText.indexOf('CPOV-000009911'));
+                        const afterSection = extractedText.substring(extractedText.indexOf('CPOV-000009911'));
                         
-                        // Buscar IDs de carga
-                        const loadIds = extractedText.match(/CG-\d+/gi);
-                        console.log('🔍 IDs de carga encontrados:', loadIds);
+                        console.log('📄 Sección ANTES de CPOV-000009911 (primeros 500 chars):', beforeSection.substring(0, 500));
+                        console.log('📄 Sección DESPUÉS de CPOV-000009911 (primeros 500 chars):', afterSection.substring(0, 500));
                         
-                        // Análisis de secciones específicas si existen
-                        if (extractedText.includes('CPOV-000009911')) {
-                            console.log('🔍 Análisis de sección problemática CPOV-000009911:');
-                            const beforeSection = extractedText.substring(0, extractedText.indexOf('CPOV-000009911'));
-                            const afterSection = extractedText.substring(extractedText.indexOf('CPOV-000009911'));
-                            
-                            console.log('📄 Sección ANTES de CPOV-000009911 (últimos 500 chars):', beforeSection.substring(Math.max(0, beforeSection.length - 500)));
-                            console.log('📄 Sección DESPUÉS de CPOV-000009911 (primeros 500 chars):', afterSection.substring(0, 500));
-                            
-                            // Buscar cantidades en cada sección
-                            const beforeQuantities = beforeSection.match(/(\d+)\s+UND/gi);
-                            const afterQuantities = afterSection.match(/(\d+)\s+UND/gi);
-                            
-                            console.log('🔍 Cantidades ANTES de CPOV-000009911:', beforeQuantities);
-                            console.log('🔍 Cantidades DESPUÉS de CPOV-000009911:', afterQuantities);
-                        }
+                        // Buscar cantidades en cada sección
+                        const beforeQuantities = beforeSection.match(/\b(\d{1,4})\s*UND\b/gi);
+                        const afterQuantities = afterSection.match(/\b(\d{1,4})\s*UND\b/gi);
+                        
+                        console.log('🔍 Cantidades ANTES de CPOV-000009911:', beforeQuantities);
+                        console.log('🔍 Cantidades DESPUÉS de CPOV-000009911:', afterQuantities);
                         
                         if (extractedText.length < 100) {
                             console.warn('⚠️ Texto extraído muy corto, puede haber problemas con el PDF');
                         }
                         
-                        // Verificar calidad del texto extraído
-                        const hasRelevantContent = extractedText.includes('CPOV') || extractedText.includes('CG-') || extractedText.includes('UND');
-                        if (!hasRelevantContent) {
-                            console.warn('⚠️ El texto extraído no contiene contenido relevante esperado');
-                        }
+                        // Preprocesar el texto extraído del PDF
+                        extractedText = preprocessText(extractedText);
                         
                     } catch (pdfError) {
                         console.error('❌ Error extrayendo PDF:', pdfError.message);
-                        console.error('❌ Stack trace:', pdfError.stack);
                         extractedText = 'PDF procesado - contenido no extraíble';
                     }
                 } else {
-                    console.log('📄 Procesando archivo de texto...');
                     extractedText = file.buffer.toString('utf8');
-                    console.log(`📄 Texto extraído: ${extractedText.length} caracteres`);
+                    // Preprocesar también texto plano
+                    extractedText = preprocessText(extractedText);
                 }
 
                         // Extraer datos con IA mejorada
