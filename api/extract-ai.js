@@ -736,103 +736,37 @@ module.exports = async (req, res) => {
                 const file = files[0];
                 
                 if (file.mimetype === 'application/pdf') {
-                    // USAR EXACTAMENTE LA MISMA LÓGICA QUE LOCAL
+                    // USAR SOLO pdf-parse para evitar problemas de módulos ES6 en Vercel
                     try {
-                        console.log('📄 Procesando archivo PDF usando lógica LOCAL...');
+                        console.log('📄 Procesando archivo PDF usando pdf-parse...');
                         
-                        // Importar la clase ExtractorDatos del servidor local
-                        const ExtractorDatos = require('../index');
-                        const extractor = new ExtractorDatos();
+                        // Usar solo pdf-parse (sin pdfjs-dist)
+                        const pdfParse = require('pdf-parse');
                         
-                        // Crear un archivo temporal para usar la lógica local
-                        const tempFilePath = `/tmp/${Date.now()}-${file.originalname}`;
-                        require('fs').writeFileSync(tempFilePath, file.buffer);
+                        // Opciones optimizadas para Vercel
+                        const options = {
+                            normalizeWhitespace: false,
+                            disableCombineTextItems: true,
+                            preserveWhitespace: true
+                        };
                         
-                        console.log('📄 Archivo temporal creado:', tempFilePath);
+                        const pdfData = await pdfParse(file.buffer, options);
+                        extractedText = pdfData.text;
                         
-                        // Usar exactamente la misma lógica que local
-                        const textResult = await extractor.extractFromMultipleFiles([tempFilePath], {
-                            extractionType: 'all'
-                        });
-                        
-                        console.log('📄 Resultado de extracción local:', textResult);
-                        
-                        if (!textResult || textResult.length === 0) {
-                            throw new Error('No se pudo extraer texto del documento');
-                        }
-                        
-                        // Obtener el texto del resultado (misma lógica que local)
-                        const firstResult = textResult[0];
-                        let fullText = '';
-                        
-                        if (firstResult.success && firstResult.data) {
-                            // Para PDF, Word, Text
-                            if (firstResult.data.text) {
-                                fullText = firstResult.data.text;
-                            }
-                            // Para Excel, convertir a texto
-                            else if (firstResult.data.sheets) {
-                                fullText = firstResult.data.sheets.map(sheet => 
-                                    sheet.data.map(row => row.join(' ')).join('\n')
-                                ).join('\n');
-                            }
-                        }
-                        
-                        extractedText = fullText;
-                        
-                        console.log('📄 Texto extraído usando lógica LOCAL:');
+                        console.log('📄 Texto extraído usando pdf-parse:');
                         console.log('📄 Longitud:', extractedText.length);
+                        console.log('📄 Número de páginas:', pdfData.numpages);
                         console.log('📄 Muestra (primeros 1000 chars):', extractedText.substring(0, 1000));
                         
-                        // Limpiar archivo temporal
-                        if (require('fs').existsSync(tempFilePath)) {
-                            require('fs').unlinkSync(tempFilePath);
-                        }
-                        
                     } catch (pdfError) {
-                        console.error('❌ Error usando lógica local:', pdfError.message);
+                        console.error('❌ Error extrayendo PDF:', pdfError.message);
                         
-                        // Fallback a método anterior si falla
-                        console.log('🔄 Usando fallback a pdf-parse...');
-                        const pdfParse = require('pdf-parse');
-                        const pdfData = await pdfParse(file.buffer);
-                        extractedText = pdfData.text;
+                        // Fallback simple
+                        extractedText = 'Error extrayendo PDF - usando fallback';
                     }
                 } else {
-                    // Para otros tipos de archivo, usar la misma lógica local
-                    try {
-                        console.log('📄 Procesando archivo no-PDF usando lógica LOCAL...');
-                        
-                        const ExtractorDatos = require('../index');
-                        const extractor = new ExtractorDatos();
-                        
-                        const tempFilePath = `/tmp/${Date.now()}-${file.originalname}`;
-                        require('fs').writeFileSync(tempFilePath, file.buffer);
-                        
-                        const textResult = await extractor.extractFromMultipleFiles([tempFilePath], {
-                            extractionType: 'all'
-                        });
-                        
-                        if (textResult && textResult.length > 0) {
-                            const firstResult = textResult[0];
-                            if (firstResult.success && firstResult.data && firstResult.data.text) {
-                                extractedText = firstResult.data.text;
-                            } else {
-                                extractedText = file.buffer.toString('utf8');
-                            }
-                        } else {
-                            extractedText = file.buffer.toString('utf8');
-                        }
-                        
-                        // Limpiar archivo temporal
-                        if (require('fs').existsSync(tempFilePath)) {
-                            require('fs').unlinkSync(tempFilePath);
-                        }
-                        
-                    } catch (error) {
-                        console.error('❌ Error procesando archivo:', error.message);
-                        extractedText = file.buffer.toString('utf8');
-                    }
+                    // Para otros tipos de archivo
+                    extractedText = file.buffer.toString('utf8');
                 }
 
                         // Extraer datos con IA mejorada
