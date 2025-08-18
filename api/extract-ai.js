@@ -161,19 +161,19 @@ function extractFieldsManually(text, requestedFields) {
                 }
             });
             
-            // Para cada orden encontrada, buscar sus artículos asociados
+            // Para cada orden encontrada, buscar sus códigos de artículo asociados
             const orderNumbers = Array.from(seenOrderNumbers);
             orderNumbers.forEach(orderNumber => {
-                // Buscar artículos asociados a esta orden
+                // Buscar códigos de artículo asociados a esta orden (formato: 101643-250)
                 const orderSection = text.split(orderNumber)[1] || text;
-                const articleMatches = orderSection.match(/([A-Z\s\d\/\"\-\'\.]+(?:SONACA|CORVI)[A-Z\s\d\/\"\-\'\.]*)/gi);
+                const articleCodeMatches = orderSection.match(/\d{6}-\d{3}/gi);
                 
-                if (articleMatches) {
-                    articleMatches.forEach(article => {
-                        const cleanArticle = article.trim();
-                        if (cleanArticle.length > 10) { // Filtrar artículos válidos
-                            results.push({ nombre: 'Nombre de artículo', valor: cleanArticle });
-                            console.log(`✅ Encontrado artículo: ${cleanArticle}`);
+                if (articleCodeMatches) {
+                    articleCodeMatches.forEach(articleCode => {
+                        const cleanArticleCode = articleCode.trim();
+                        if (cleanArticleCode.length > 8) { // Filtrar códigos válidos (formato: 101643-250)
+                            results.push({ nombre: 'Código de artículo', valor: cleanArticleCode });
+                            console.log(`✅ Encontrado código de artículo: ${cleanArticleCode}`);
                         }
                     });
                 }
@@ -217,9 +217,9 @@ function extractFieldsManually(text, requestedFields) {
         }
         
         if (fieldLower.includes('código artículo') || fieldLower.includes('codigo articulo') || fieldLower.includes('article code')) {
-            // Buscar códigos de artículo (formato Pxxxx)
+            // Buscar códigos de artículo (formato: 101643-250)
             const articleCodePatterns = [
-                /P\d{4,}/gi,
+                /\d{6}-\d{3}/gi,
                 /(?:Código de artículo|Article Code):\s*([A-Z0-9\-]+)/gi
             ];
             
@@ -229,24 +229,6 @@ function extractFieldsManually(text, requestedFields) {
                     matches.forEach(match => {
                         results.push({ nombre: field, valor: match.trim() });
                         console.log(`✅ Encontrado código de artículo: ${match.trim()}`);
-                    });
-                }
-            });
-        }
-        
-        if (fieldLower.includes('nombre de artículo') || fieldLower.includes('nombre de articulo') || fieldLower.includes('article name')) {
-            // Buscar nombres de artículos
-            const articleNamePatterns = [
-                /(?:Nombre de artículo|Article Name):\s*([^\n]+)/gi,
-                /(?:TUBOS|TUBO)\s+[A-Z\s]+/gi
-            ];
-            
-            articleNamePatterns.forEach(pattern => {
-                const matches = text.match(pattern);
-                if (matches) {
-                    matches.forEach(match => {
-                        results.push({ nombre: field, valor: match.trim() });
-                        console.log(`✅ Encontrado nombre de artículo: ${match.trim()}`);
                     });
                 }
             });
@@ -294,7 +276,7 @@ function generateExcel(structuredData) {
     const allData = [];
 
     // Crear encabezados
-    const headers = ['ID de carga', 'Número de orden', 'Nombre de artículo', 'Cantidad'];
+    const headers = ['ID de carga', 'Número de orden', 'Código de artículo', 'Cantidad'];
     allData.push(headers);
 
     // Agrupar datos por categoría
@@ -312,61 +294,61 @@ function generateExcel(structuredData) {
     // Obtener datos agrupados
     const loadIds = groupedData['ID de carga'] || [];
     const orderNumbers = groupedData['Número de orden'] || [];
-    const articleNames = groupedData['Nombre de artículo'] || [];
+    const articleCodes = groupedData['Código de artículo'] || [];
     const quantities = groupedData['Cantidad'] || [];
 
     console.log('📊 Datos extraídos:');
     console.log('- ID de carga:', loadIds);
     console.log('- Números de orden:', orderNumbers);
-    console.log('- Nombres de artículos:', articleNames);
+    console.log('- Códigos de artículo:', articleCodes);
     console.log('- Cantidades:', quantities);
 
     // Crear registros manteniendo relaciones
     const records = [];
     const loadId = loadIds[0] || '';
     
-    // Método 1: Procesar por órdenes y sus artículos asociados
-    if (orderNumbers.length > 0 && articleNames.length > 0) {
-        console.log('🔄 Procesando por relaciones orden-artículo...');
+    // Método 1: Procesar por órdenes y sus códigos de artículo asociados
+    if (orderNumbers.length > 0 && articleCodes.length > 0) {
+        console.log('🔄 Procesando por relaciones orden-código de artículo...');
         
-        // Crear un mapa de órdenes con sus artículos
-        const orderArticleMap = new Map();
+        // Crear un mapa de órdenes con sus códigos de artículo
+        const orderArticleCodeMap = new Map();
         
-        // Buscar artículos asociados a cada orden en el texto original
+        // Buscar códigos de artículo asociados a cada orden en el texto original
         orderNumbers.forEach(orderNumber => {
             const orderSection = structuredData.find(item => 
-                item.label === 'Nombre de artículo' && 
+                item.label === 'Código de artículo' && 
                 item.value && 
-                item.value.includes('TUBOS PVC')
+                item.value.match(/\d{6}-\d{3}/)
             );
             
             if (orderSection) {
-                if (!orderArticleMap.has(orderNumber)) {
-                    orderArticleMap.set(orderNumber, []);
+                if (!orderArticleCodeMap.has(orderNumber)) {
+                    orderArticleCodeMap.set(orderNumber, []);
                 }
-                orderArticleMap.get(orderNumber).push(orderSection.value);
+                orderArticleCodeMap.get(orderNumber).push(orderSection.value);
             }
         });
         
-        console.log('📋 Mapa de relaciones orden-artículo:', orderArticleMap);
+        console.log('📋 Mapa de relaciones orden-código de artículo:', orderArticleCodeMap);
         
-        // Crear registros para cada orden con sus artículos
-        for (const [orderNumber, articles] of orderArticleMap) {
-            articles.forEach(article => {
-                // Buscar cantidad asociada a este artículo
+        // Crear registros para cada orden con sus códigos de artículo
+        for (const [orderNumber, articleCodes] of orderArticleCodeMap) {
+            articleCodes.forEach(articleCode => {
+                // Buscar cantidad asociada a este código de artículo
                 const quantity = quantities.find(q => {
-                    // Buscar cantidad que esté cerca del artículo en el texto
+                    // Buscar cantidad que esté cerca del código de artículo en el texto
                     return q && q.includes('UND');
                 }) || '';
                 
                 records.push({
                     loadId: loadId,
                     orderNumber: orderNumber,
-                    articleName: article,
+                    articleCode: articleCode,
                     quantity: quantity.replace(/\s+UND.*/, '') || ''
                 });
                 
-                console.log(`📝 Registro creado: ${orderNumber} | ${article} | ${quantity}`);
+                console.log(`📝 Registro creado: ${orderNumber} | ${articleCode} | ${quantity}`);
             });
         }
     }
@@ -375,18 +357,18 @@ function generateExcel(structuredData) {
     if (records.length === 0) {
         console.log('🔄 Usando método secuencial como fallback...');
         
-        const maxLength = Math.max(orderNumbers.length, articleNames.length, quantities.length);
+        const maxLength = Math.max(orderNumbers.length, articleCodes.length, quantities.length);
         
         for (let i = 0; i < maxLength; i++) {
             const record = {
                 loadId: loadId,
                 orderNumber: orderNumbers[i] || '',
-                articleName: articleNames[i] || '',
+                articleCode: articleCodes[i] || '',
                 quantity: quantities[i] ? quantities[i].replace(/\s+UND.*/, '') : ''
             };
             
             records.push(record);
-            console.log(`📝 Registro ${i + 1}: ${record.orderNumber} | ${record.articleName} | ${record.quantity}`);
+            console.log(`📝 Registro ${i + 1}: ${record.orderNumber} | ${record.articleCode} | ${record.quantity}`);
         }
     }
 
@@ -397,7 +379,7 @@ function generateExcel(structuredData) {
         const row = [
             record.loadId,
             record.orderNumber,
-            record.articleName,
+            record.articleCode,
             record.quantity
         ];
         allData.push(row);
@@ -411,7 +393,7 @@ function generateExcel(structuredData) {
     mainWorksheet['!cols'] = [
         { width: 20 },  // ID de carga
         { width: 25 },  // Número de orden
-        { width: 50 },  // Nombre de artículo
+        { width: 20 },  // Código de artículo
         { width: 15 }   // Cantidad
     ];
 
