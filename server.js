@@ -839,12 +839,9 @@ async function generateExcel(fileName, structuredData, fullText) {
         const loadId = groupedData['ID de carga']?.[0] || '';
         
         if (structuredData && structuredData.length > 0) {
-            // Método 2: Agrupar por orden y código de artículo, sumando cantidades
+            // Método 2: Procesar secuencialmente manteniendo cada código de artículo como registro separado
             if (structuredData && structuredData.length > 0) {
-                console.log('🔄 Usando método de agrupamiento por orden y código de artículo...');
-                
-                // Crear un mapa para agrupar por orden + código de artículo
-                const orderArticleMap = new Map();
+                console.log('🔄 Usando método secuencial para mantener cada código de artículo...');
                 
                 let currentOrder = '';
                 let currentArticleCode = '';
@@ -856,13 +853,25 @@ async function generateExcel(fileName, structuredData, fullText) {
                     const value = item.value || item.valor || '';
                     
                     if (label.toLowerCase().includes('número de orden') || label.toLowerCase().includes('numero de orden')) {
-                        // Si tenemos datos acumulados, guardar en el mapa
+                        // Si tenemos datos acumulados del artículo anterior, crear registro
                         if (currentOrder && currentArticleCode) {
-                            const key = `${currentOrder}|${currentArticleCode}`;
-                            if (!orderArticleMap.has(key)) {
-                                orderArticleMap.set(key, []);
+                            if (currentQuantities.length > 0) {
+                                // Usar la primera cantidad (no sumar)
+                                records.push({
+                                    loadId: loadId,
+                                    orderNumber: currentOrder,
+                                    articleName: currentArticleCode,
+                                    quantity: currentQuantities[0].replace(/\s+UND.*/, '')
+                                });
+                                console.log(`📝 Registro creado: ${currentOrder} | ${currentArticleCode} | ${currentQuantities[0]}`);
+                            } else {
+                                records.push({
+                                    loadId: loadId,
+                                    orderNumber: currentOrder,
+                                    articleName: currentArticleCode,
+                                    quantity: ''
+                                });
                             }
-                            orderArticleMap.get(key).push(...currentQuantities);
                         }
                         
                         // Iniciar nuevo registro
@@ -871,13 +880,25 @@ async function generateExcel(fileName, structuredData, fullText) {
                         currentQuantities = [];
                         
                     } else if (label.toLowerCase().includes('código de artículo') || label.toLowerCase().includes('codigo de articulo')) {
-                        // Si tenemos datos acumulados del artículo anterior, guardar en el mapa
+                        // Si tenemos datos acumulados del artículo anterior, crear registro
                         if (currentOrder && currentArticleCode) {
-                            const key = `${currentOrder}|${currentArticleCode}`;
-                            if (!orderArticleMap.has(key)) {
-                                orderArticleMap.set(key, []);
+                            if (currentQuantities.length > 0) {
+                                // Usar la primera cantidad (no sumar)
+                                records.push({
+                                    loadId: loadId,
+                                    orderNumber: currentOrder,
+                                    articleName: currentArticleCode,
+                                    quantity: currentQuantities[0].replace(/\s+UND.*/, '')
+                                });
+                                console.log(`📝 Registro creado: ${currentOrder} | ${currentArticleCode} | ${currentQuantities[0]}`);
+                            } else {
+                                records.push({
+                                    loadId: loadId,
+                                    orderNumber: currentOrder,
+                                    articleName: currentArticleCode,
+                                    quantity: ''
+                                });
                             }
-                            orderArticleMap.get(key).push(...currentQuantities);
                         }
                         
                         currentArticleCode = value;
@@ -890,39 +911,20 @@ async function generateExcel(fileName, structuredData, fullText) {
                 
                 // Procesar el último registro
                 if (currentOrder && currentArticleCode) {
-                    const key = `${currentOrder}|${currentArticleCode}`;
-                    if (!orderArticleMap.has(key)) {
-                        orderArticleMap.set(key, []);
-                    }
-                    orderArticleMap.get(key).push(...currentQuantities);
-                }
-                
-                console.log('📋 Mapa de agrupamiento:', orderArticleMap);
-                
-                // Crear registros únicos por orden + código de artículo
-                for (const [key, quantities] of orderArticleMap) {
-                    const [orderNumber, articleCode] = key.split('|');
-                    
-                    if (quantities.length > 0) {
-                        // Sumar todas las cantidades del mismo código de artículo
-                        const totalQuantity = quantities.reduce((sum, qty) => {
-                            const numQty = parseInt(qty.replace(/\s+UND.*/, '')) || 0;
-                            return sum + numQty;
-                        }, 0);
-                        
+                    if (currentQuantities.length > 0) {
+                        // Usar la primera cantidad (no sumar)
                         records.push({
                             loadId: loadId,
-                            orderNumber: orderNumber,
-                            articleName: articleCode,
-                            quantity: totalQuantity.toString()
+                            orderNumber: currentOrder,
+                            articleName: currentArticleCode,
+                            quantity: currentQuantities[0].replace(/\s+UND.*/, '')
                         });
-                        
-                        console.log(`📝 Registro agrupado: ${orderNumber} | ${articleCode} | Total: ${totalQuantity} (de ${quantities.length} cantidades)`);
+                        console.log(`📝 Último registro creado: ${currentOrder} | ${currentArticleCode} | ${currentQuantities[0]}`);
                     } else {
                         records.push({
                             loadId: loadId,
-                            orderNumber: orderNumber,
-                            articleName: articleCode,
+                            orderNumber: currentOrder,
+                            articleName: currentArticleCode,
                             quantity: ''
                         });
                     }
