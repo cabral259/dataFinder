@@ -13,166 +13,6 @@ const upload = multer({
 // Configuración de Gemini
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// Función alternativa usando pdfjs-dist para mejor extracción
-async function extractPDFWithPdfJS(buffer) {
-    try {
-        console.log('🔄 Intentando extracción con pdfjs-dist...');
-        
-        // Importar pdfjs-dist dinámicamente
-        const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js');
-        
-        // Cargar el documento
-        const loadingTask = pdfjsLib.getDocument({ data: buffer });
-        const pdf = await loadingTask.promise;
-        
-        let fullText = '';
-        
-        console.log(`📄 PDF cargado: ${pdf.numPages} páginas`);
-        
-        // Extraer texto de cada página
-        for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-            console.log(`📄 Procesando página ${pageNum}/${pdf.numPages}`);
-            
-            const page = await pdf.getPage(pageNum);
-            const textContent = await page.getTextContent();
-            
-            // Construir texto manteniendo la estructura original
-            let pageText = '';
-            let lastY = null;
-            
-            textContent.items.forEach(item => {
-                // Agregar salto de línea si hay cambio significativo en Y
-                if (lastY !== null && Math.abs(item.transform[5] - lastY) > 5) {
-                    pageText += '\n';
-                }
-                
-                pageText += item.str;
-                lastY = item.transform[5];
-            });
-            
-            fullText += pageText + '\n\n'; // Separar páginas con doble salto
-        }
-        
-        console.log(`✅ Extracción con pdfjs-dist exitosa: ${fullText.length} caracteres`);
-        console.log('📄 Muestra del texto extraído (primeros 500 chars):', fullText.substring(0, 500));
-        
-        return fullText;
-        
-    } catch (error) {
-        console.log('❌ Error con pdfjs-dist:', error.message);
-        return null;
-    }
-}
-
-// Función para corregir problemas específicos de Vercel
-function fixVercelSpecificIssues(text) {
-    console.log('🔧 Aplicando correcciones específicas para Vercel...');
-    console.log('📄 Texto antes de correcciones (primeros 500 chars):', text.substring(0, 500));
-    
-    // Detectar y corregir el problema del "1" extra en cantidades
-    // Buscar patrones como "1400 UND" que deberían ser "400 UND"
-    const problematicPattern = /1(\d{3})\s+UND/gi;
-    let correctedText = text;
-    let corrections = [];
-    
-    let match;
-    while ((match = problematicPattern.exec(text)) !== null) {
-        const originalNumber = match[0]; // "1400 UND"
-        const correctedNumber = match[1] + ' UND'; // "400 UND"
-        
-        // Verificar que no sea un número de orden válido
-        const orderPattern = new RegExp(`CPOV-${match[1]}`, 'i');
-        if (!orderPattern.test(text)) {
-            // Verificación adicional: asegurar que no esté cerca de un número de orden
-            const matchIndex = text.indexOf(originalNumber);
-            const beforeText = text.substring(Math.max(0, matchIndex - 50), matchIndex);
-            const afterText = text.substring(matchIndex + originalNumber.length, matchIndex + originalNumber.length + 50);
-            
-            // Solo corregir si no hay contexto de número de orden cerca
-            if (!beforeText.includes('CPOV-') && !afterText.includes('CPOV-')) {
-                correctedText = correctedText.replace(originalNumber, correctedNumber);
-                corrections.push(`${originalNumber} → ${correctedNumber}`);
-                console.log(`🔧 Corrección aplicada: ${originalNumber} → ${correctedNumber}`);
-            } else {
-                console.log(`⚠️ Corrección omitida (cerca de número de orden): ${originalNumber}`);
-            }
-        }
-    }
-    
-    // Detectar y corregir otros patrones problemáticos (más conservador)
-    const otherProblematicPatterns = [
-        { pattern: /1(\d{2})\s+UND/gi, description: 'números de 2 dígitos' }
-        // Removido el patrón para números de 1 dígito para evitar sobrecorrecciones
-    ];
-    
-    otherProblematicPatterns.forEach(({ pattern, description }) => {
-        while ((match = pattern.exec(correctedText)) !== null) {
-            const originalNumber = match[0];
-            const correctedNumber = match[1] + ' UND';
-            
-            // Verificar que no sea un número de orden válido
-            const orderPattern = new RegExp(`CPOV-${match[1]}`, 'i');
-            if (!orderPattern.test(correctedText)) {
-                // Verificación adicional: asegurar que no esté cerca de un número de orden
-                const matchIndex = correctedText.indexOf(originalNumber);
-                const beforeText = correctedText.substring(Math.max(0, matchIndex - 50), matchIndex);
-                const afterText = correctedText.substring(matchIndex + originalNumber.length, matchIndex + originalNumber.length + 50);
-                
-                // Solo corregir si no hay contexto de número de orden cerca
-                if (!beforeText.includes('CPOV-') && !afterText.includes('CPOV-')) {
-                    correctedText = correctedText.replace(originalNumber, correctedNumber);
-                    corrections.push(`${originalNumber} → ${correctedNumber}`);
-                    console.log(`🔧 Corrección aplicada (${description}): ${originalNumber} → ${correctedNumber}`);
-                } else {
-                    console.log(`⚠️ Corrección omitida (cerca de número de orden): ${originalNumber}`);
-                }
-            }
-        }
-    });
-    
-    if (corrections.length > 0) {
-        console.log(`🔧 Total de correcciones aplicadas: ${corrections.length}`);
-        console.log('🔧 Lista de correcciones:', corrections);
-    } else {
-        console.log('✅ No se encontraron problemas específicos de Vercel para corregir');
-    }
-    
-    console.log('📄 Texto después de correcciones (primeros 500 chars):', correctedText.substring(0, 500));
-    
-    return correctedText;
-}
-
-// Función de preprocesamiento de texto para mejorar extracción en Vercel
-function preprocessText(text) {
-    console.log('🔧 Preprocesando texto para Vercel...');
-    console.log('📄 Longitud original:', text.length);
-    console.log('📄 Texto original (primeros 500 chars):', text.substring(0, 500));
-    
-    // Normalizar solo saltos de línea (más conservador)
-    let processedText = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-    
-    console.log('📄 Texto después de normalizar saltos de línea (primeros 500 chars):', processedText.substring(0, 500));
-    
-    // Separar por líneas y limpiar solo espacios al inicio/final
-    const lines = processedText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
-    
-    console.log('📄 Número de líneas:', lines.length);
-    
-    // Log de muestra para debugging
-    console.log('📄 Muestra del texto procesado (primeras 5 líneas):');
-    lines.slice(0, 5).forEach((line, index) => {
-        console.log(`${index + 1}: "${line}"`);
-    });
-    
-    // Reconstruir el texto con líneas bien separadas (sin limpiar espacios internos)
-    processedText = lines.join('\n');
-    
-    console.log('📄 Longitud procesada:', processedText.length);
-    console.log('📄 Texto final (primeros 500 chars):', processedText.substring(0, 500));
-    
-    return processedText;
-}
-
 // Función de extracción con IA (EXACTAMENTE IGUAL QUE LOCAL)
 async function extractWithAI(text, requestedFields) {
     try {
@@ -289,28 +129,17 @@ Reglas:
     }
 }
 
-// Función de extracción manual (fallback)
+// Función de extracción manual como fallback (EXACTAMENTE IGUAL QUE LOCAL)
 function extractFieldsManually(text, requestedFields) {
-    console.log('🔍 Iniciando extracción manual mejorada...');
-    console.log('📄 Longitud del texto a procesar:', text.length);
-    console.log('📋 Campos solicitados:', requestedFields);
-    
+    console.log('🔍 Iniciando extracción manual...');
     const results = [];
     
-    // Separar el texto por líneas y limpiar
-    const lines = text.split(/\r?\n/).map(line => line.trim()).filter(line => line.length > 0);
-    console.log(`📄 Procesando ${lines.length} líneas del documento`);
-    
-    // Log de las primeras líneas para debugging
-    console.log('📄 Primeras 5 líneas del documento:');
-    lines.slice(0, 5).forEach((line, index) => {
-        console.log(`${index + 1}: "${line}"`);
-    });
-
     requestedFields.forEach(field => {
-        const fieldLower = field.toLowerCase();
+        const fieldLower = field.toLowerCase().trim();
+        console.log(`🔍 Buscando campo: "${field}"`);
         
         if (fieldLower.includes('orden') || fieldLower.includes('order')) {
+            // Buscar números de orden
             const orderPatterns = [
                 /CPOV-\d+/gi,
                 /(?:Número de orden|Order):\s*([A-Z0-9\-]+)/gi
@@ -331,7 +160,28 @@ function extractFieldsManually(text, requestedFields) {
                     });
                 }
             });
-        } else if (fieldLower.includes('carga') || fieldLower.includes('load')) {
+            
+            // Para cada orden encontrada, buscar sus artículos asociados
+            const orderNumbers = Array.from(seenOrderNumbers);
+            orderNumbers.forEach(orderNumber => {
+                // Buscar artículos asociados a esta orden
+                const orderSection = text.split(orderNumber)[1] || text;
+                const articleMatches = orderSection.match(/([A-Z\s\d\/\"\-\'\.]+(?:SONACA|CORVI)[A-Z\s\d\/\"\-\'\.]*)/gi);
+                
+                if (articleMatches) {
+                    articleMatches.forEach(article => {
+                        const cleanArticle = article.trim();
+                        if (cleanArticle.length > 10) { // Filtrar artículos válidos
+                            results.push({ nombre: 'Nombre de artículo', valor: cleanArticle });
+                            console.log(`✅ Encontrado artículo: ${cleanArticle}`);
+                        }
+                    });
+                }
+            });
+        }
+        
+        if (fieldLower.includes('carga') || fieldLower.includes('load')) {
+            // Buscar IDs de carga (sin eliminar duplicados)
             const loadPatterns = [
                 /CG-\d+/gi,
                 /(?:ID de carga|Load ID):\s*([A-Z0-9\-]+)/gi
@@ -346,124 +196,70 @@ function extractFieldsManually(text, requestedFields) {
                     });
                 }
             });
-        } else if (fieldLower.includes('artículo') || fieldLower.includes('article')) {
-            const articlePatterns = [
-                /([A-Z\s\d\/\"\-\'\.]+(?:SONACA|CORVI)[A-Z\s\d\/\"\-\'\.]*)/gi,
-                /(?:Nombre de artículo|Article Name):\s*([^\n]+)/gi
+        }
+        
+        if (fieldLower.includes('envío') || fieldLower.includes('envio') || fieldLower.includes('shipment')) {
+            // Buscar IDs de envío
+            const shipmentPatterns = [
+                /ENV-\d+/gi,
+                /(?:ID de envío|Shipment ID):\s*([A-Z0-9\-]+)/gi
             ];
             
-            articlePatterns.forEach(pattern => {
+            shipmentPatterns.forEach(pattern => {
                 const matches = text.match(pattern);
                 if (matches) {
                     matches.forEach(match => {
-                        const cleanMatch = match.trim();
-                        if (cleanMatch.length > 5) {
-                            results.push({ nombre: field, valor: cleanMatch });
-                            console.log(`✅ Encontrado nombre de artículo: ${cleanMatch}`);
+                        results.push({ nombre: field, valor: match.trim() });
+                        console.log(`✅ Encontrado ID de envío: ${match.trim()}`);
+                    });
+                }
+            });
+        }
+        
+        if (fieldLower.includes('código artículo') || fieldLower.includes('codigo articulo') || fieldLower.includes('article code')) {
+            // Buscar códigos de artículo (formato Pxxxx)
+            const articleCodePatterns = [
+                /P\d{4,}/gi,
+                /(?:Código de artículo|Article Code):\s*([A-Z0-9\-]+)/gi
+            ];
+            
+            articleCodePatterns.forEach(pattern => {
+                const matches = text.match(pattern);
+                if (matches) {
+                    matches.forEach(match => {
+                        results.push({ nombre: field, valor: match.trim() });
+                        console.log(`✅ Encontrado código de artículo: ${match.trim()}`);
+                    });
+                }
+            });
+        }
+        
+        if (fieldLower.includes('cantidad')) {
+            // Buscar cantidades (formato: número + UND/UNIDADES)
+            const quantityPatterns = [
+                /\b(\d{1,4})\s*UND\b/gi,
+                /\b(\d{1,4})\s*UNIDADES\b/gi,
+                /\b(\d{1,4})\s*PCS\b/gi
+            ];
+            
+            quantityPatterns.forEach(pattern => {
+                const matches = text.match(pattern);
+                if (matches) {
+                    matches.forEach(match => {
+                        // Extraer solo el número
+                        const numberMatch = match.match(/(\d{1,4})/);
+                        if (numberMatch) {
+                            const quantity = numberMatch[1];
+                            results.push({ nombre: field, valor: quantity });
+                            console.log(`✅ Encontrada cantidad: ${quantity}`);
                         }
                     });
                 }
             });
-        } else if (fieldLower.includes('cantidad')) {
-            console.log('🔍 Procesando cantidades línea por línea...');
-            
-            // Procesar cada línea individualmente para cantidades
-            lines.forEach((line, lineIndex) => {
-                // Solo procesar líneas que contengan palabras clave relevantes
-                if (line.includes('TUBOS PVC') || line.includes('UND') || line.includes('UNIDADES') || line.includes('CORVI') || line.includes('SONACA')) {
-                    console.log(`📄 Procesando línea ${lineIndex + 1}: "${line}"`);
-                    
-                    // Patrón más específico para cantidades: \b(\d{1,4})\s*UND\b
-                    const quantityPattern = /\b(\d{1,4})\s*UND\b/gi;
-                    const matches = line.match(quantityPattern);
-                    
-                    if (matches) {
-                        matches.forEach(match => {
-                            // Extraer solo el número
-                            const numberMatch = match.match(/(\d{1,4})/);
-                            if (numberMatch) {
-                                const quantity = numberMatch[1];
-                                const numValue = parseInt(quantity);
-                                
-                                // Validación cruzada: descartar números sospechosos
-                                if (numValue > 0 && numValue <= 9999) {
-                                    // Verificar que no sea un número de orden (CPOV-)
-                                    if (!line.includes('CPOV-') || !line.match(/CPOV-\d+/)) {
-                                        results.push({ nombre: field, valor: quantity });
-                                        console.log(`✅ Cantidad válida encontrada en línea ${lineIndex + 1}: ${quantity} UND`);
-                                    } else {
-                                        console.log(`⚠️ Cantidad descartada (posible número de orden): ${quantity} en línea ${lineIndex + 1}`);
-                                    }
-                                } else {
-                                    console.log(`⚠️ Cantidad fuera de rango: ${quantity} en línea ${lineIndex + 1}`);
-                                }
-                            }
-                        });
-                    }
-                    
-                    // Buscar también cantidades sin "UND" pero con contexto de artículo
-                    const numberOnlyPattern = /\b(\d{1,4})\b/gi;
-                    const numberMatches = line.match(numberOnlyPattern);
-                    
-                    if (numberMatches && line.includes('TUBOS PVC')) {
-                        numberMatches.forEach(match => {
-                            const numValue = parseInt(match);
-                            
-                            // Validación más estricta para números sin "UND"
-                            if (numValue > 0 && numValue <= 9999) {
-                                // Verificar que no sea parte de un número de orden
-                                const orderPattern = /CPOV-\d+/;
-                                if (!orderPattern.test(line)) {
-                                    // Verificar que esté cerca del nombre del artículo
-                                    const articleIndex = line.indexOf('TUBOS PVC');
-                                    const numberIndex = line.indexOf(match);
-                                    
-                                    // Si el número está después del artículo, es probablemente una cantidad
-                                    if (articleIndex !== -1 && numberIndex > articleIndex) {
-                                        results.push({ nombre: field, valor: match });
-                                        console.log(`✅ Cantidad inferida en línea ${lineIndex + 1}: ${match}`);
-                                    }
-                                }
-                            }
-                        });
-                    }
-                }
-            });
-            
-            // Si no se encontraron cantidades con el método específico, usar fallback
-            if (results.filter(r => r.nombre === field).length === 0) {
-                console.log('🔄 Usando método de fallback para cantidades...');
-                
-                const quantityPatterns = [
-                    /\b(\d{1,4})\s+UND\b/gi,
-                    /\b(\d{1,4})\s+UNIDADES\b/gi,
-                    /\b(\d{1,4})\s+PCS\b/gi,
-                    /(?:Cantidad|Quantity):\s*(\d{1,4})/gi
-                ];
-                
-                quantityPatterns.forEach(pattern => {
-                    const matches = text.match(pattern);
-                    if (matches) {
-                        matches.forEach(match => {
-                            const numberMatch = match.match(/(\d{1,4})/);
-                            if (numberMatch) {
-                                const quantity = numberMatch[1];
-                                const numValue = parseInt(quantity);
-                                
-                                if (numValue > 0 && numValue <= 9999) {
-                                    results.push({ nombre: field, valor: quantity });
-                                    console.log(`✅ Cantidad de fallback: ${quantity}`);
-                                }
-                            }
-                        });
-                    }
-                });
-            }
         }
     });
-
-    console.log(`📊 Total de campos encontrados manualmente: ${results.length}`);
-    console.log('📋 Resultados finales de extracción manual:', results);
+    
+    console.log(`✅ Extracción manual completada: ${results.length} campos encontrados`);
     return results;
 }
 
@@ -633,43 +429,52 @@ module.exports = async (req, res) => {
 
                 console.log('🤖 Iniciando extracción con IA para campos:', requestedFields);
 
-                // Extraer texto del archivo
-                let extractedText = '';
-                const file = files[0];
-                
-                if (file.mimetype === 'application/pdf') {
-                    // USAR SOLO pdf-parse para evitar problemas de módulos ES6 en Vercel
+                        // Extraer texto del archivo
+        const file = files[0];
+        let extractedText = '';
+        
+        if (file.mimetype === 'application/pdf') {
+                    console.log('📄 Procesando archivo PDF...');
                     try {
-                        console.log('📄 Procesando archivo PDF usando pdf-parse...');
-                        
-                        // Usar solo pdf-parse (sin pdfjs-dist)
                         const pdfParse = require('pdf-parse');
-                        
-                        // Opciones optimizadas para Vercel
-                        const options = {
-                            normalizeWhitespace: false,
-                            disableCombineTextItems: true,
-                            preserveWhitespace: true
-                        };
-                        
-                        const pdfData = await pdfParse(file.buffer, options);
+                        const pdfData = await pdfParse(file.buffer);
                         extractedText = pdfData.text;
-                        
-                        console.log('📄 Texto extraído usando pdf-parse:');
-                        console.log('📄 Longitud:', extractedText.length);
-                        console.log('📄 Número de páginas:', pdfData.numpages);
-                        console.log('📄 Muestra (primeros 1000 chars):', extractedText.substring(0, 1000));
-                        
+                        console.log(`✅ PDF procesado: ${extractedText.length} caracteres`);
                     } catch (pdfError) {
-                        console.error('❌ Error extrayendo PDF:', pdfError.message);
-                        
-                        // Fallback simple
-                        extractedText = 'Error extrayendo PDF - usando fallback';
+                        console.error('❌ Error procesando PDF:', pdfError.message);
+                        return res.status(500).json({
+                            success: false,
+                            error: 'Error procesando archivo PDF'
+                        });
                     }
-                } else {
-                    // Para otros tipos de archivo
+                } else if (file.mimetype.includes('text/') || file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+                    console.log('📄 Procesando archivo de texto...');
                     extractedText = file.buffer.toString('utf8');
+                } else {
+                    console.log('📄 Procesando archivo Excel...');
+                    try {
+                        const workbook = XLSX.read(file.buffer, { type: 'buffer' });
+                        const sheetNames = workbook.SheetNames;
+                        const allData = [];
+                        
+                        sheetNames.forEach(sheetName => {
+                            const worksheet = workbook.Sheets[sheetName];
+                            const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                            allData.push(...jsonData);
+                        });
+                        
+                        extractedText = allData.map(row => row.join(' ')).join('\n');
+                    } catch (excelError) {
+                        console.error('❌ Error procesando Excel:', excelError.message);
+                        return res.status(500).json({
+                            success: false,
+                            error: 'Error procesando archivo Excel'
+                        });
+                    }
                 }
+                
+                console.log('📄 Texto extraído (primeros 500 chars):', extractedText.substring(0, 500));
+                console.log('�� Longitud total del texto:', extractedText.length);
 
                 // Extraer datos con IA mejorada
         console.log('🔍 Iniciando extracción con IA mejorada...');
