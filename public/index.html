@@ -737,20 +737,54 @@
         // Manejar selección de archivos
         fileInput.addEventListener('change', (e) => {
             console.log('📂 Archivos seleccionados:', e.target.files);
-            selectedFiles = Array.from(e.target.files);
+            console.log('📂 FileList length:', e.target.files.length);
             
-            // Logging detallado de cada archivo
-            selectedFiles.forEach((file, index) => {
-                console.log(`📄 Archivo ${index + 1}:`, {
+            // Verificar cada archivo antes de procesarlo
+            for (let i = 0; i < e.target.files.length; i++) {
+                const file = e.target.files[i];
+                console.log(`🔍 Archivo ${i + 1} antes de Array.from:`, {
                     nombre: file.name,
                     tamaño: file.size,
                     tipo: file.type,
-                    últimaModificación: file.lastModified
+                    últimaModificación: file.lastModified,
+                    esArchivo: file instanceof File,
+                    esBlob: file instanceof Blob
+                });
+            }
+            
+            selectedFiles = Array.from(e.target.files);
+            
+            // Logging detallado de cada archivo después de Array.from
+            selectedFiles.forEach((file, index) => {
+                console.log(`📄 Archivo ${index + 1} después de Array.from:`, {
+                    nombre: file.name,
+                    tamaño: file.size,
+                    tipo: file.type,
+                    últimaModificación: file.lastModified,
+                    esArchivo: file instanceof File,
+                    esBlob: file instanceof Blob
                 });
             });
             
             updateFileList();
             updateExtractButton();
+            
+            // Verificación adicional: intentar leer el archivo
+            if (selectedFiles.length > 0) {
+                const file = selectedFiles[0];
+                console.log('🔍 Intentando leer el archivo para verificar contenido...');
+                
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    console.log('📖 Archivo leído exitosamente');
+                    console.log('📊 Tamaño del contenido:', e.target.result.length);
+                    console.log('📄 Primeros 100 caracteres:', e.target.result.substring(0, 100));
+                };
+                reader.onerror = function(e) {
+                    console.error('❌ Error leyendo archivo:', e);
+                };
+                reader.readAsText(file);
+            }
         });
 
         // Configurar campos específicos por defecto (Extracción Inteligente)
