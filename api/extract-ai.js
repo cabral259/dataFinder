@@ -236,69 +236,68 @@ function extractFieldsManually(text, requestedFields) {
             
             // Procesar cada línea individualmente para cantidades
             lines.forEach((line, lineIndex) => {
-                console.log(`📄 Procesando línea ${lineIndex + 1}: "${line}"`);
-                
-                // Patrón más específico para cantidades: \b(\d{1,4})\s*UND\b
-                const quantityPattern = /\b(\d{1,4})\s*UND\b/gi;
-                const matches = line.match(quantityPattern);
-                
-                if (matches) {
-                    matches.forEach(match => {
-                        // Extraer solo el número
-                        const numberMatch = match.match(/(\d{1,4})/);
-                        if (numberMatch) {
-                            const quantity = numberMatch[1];
-                            const numValue = parseInt(quantity);
-                            
-                            // Validación cruzada: descartar números sospechosos
-                            if (numValue > 0 && numValue <= 9999) {
-                                // Verificar que no sea un número de orden (CPOV-)
-                                if (!line.includes('CPOV-') || !line.match(/CPOV-\d+/)) {
-                                    results.push({ nombre: field, valor: quantity });
-                                    console.log(`✅ Cantidad válida encontrada en línea ${lineIndex + 1}: ${quantity} UND`);
-                                } else {
-                                    console.log(`⚠️ Cantidad descartada (posible número de orden): ${quantity} en línea ${lineIndex + 1}`);
-                                }
-                            } else {
-                                console.log(`⚠️ Cantidad fuera de rango: ${quantity} en línea ${lineIndex + 1}`);
-                            }
-                        }
-                    });
-                }
-                
-                // Buscar también cantidades sin "UND" pero con contexto de artículo
-                const numberOnlyPattern = /\b(\d{1,4})\b/gi;
-                const numberMatches = line.match(numberOnlyPattern);
-                
-                if (numberMatches && (line.includes('TUBOS PVC') || line.includes('CORVI') || line.includes('SONACA'))) {
-                    numberMatches.forEach(match => {
-                        const numValue = parseInt(match);
-                        
-                        // Validación más estricta para números sin "UND"
-                        if (numValue > 0 && numValue <= 9999) {
-                            // Verificar que no sea parte de un número de orden
-                            const orderPattern = /CPOV-\d+/;
-                            if (!orderPattern.test(line)) {
-                                // Verificar que esté cerca del nombre del artículo
-                                const articleIndex = Math.max(
-                                    line.indexOf('TUBOS PVC'),
-                                    line.indexOf('CORVI'),
-                                    line.indexOf('SONACA')
-                                );
-                                const numberIndex = line.indexOf(match);
+                // Solo procesar líneas que contengan palabras clave relevantes
+                if (line.includes('TUBOS PVC') || line.includes('UND') || line.includes('UNIDADES') || line.includes('CORVI') || line.includes('SONACA')) {
+                    console.log(`📄 Procesando línea ${lineIndex + 1}: "${line}"`);
+                    
+                    // Patrón más específico para cantidades: \b(\d{1,4})\s*UND\b
+                    const quantityPattern = /\b(\d{1,4})\s*UND\b/gi;
+                    const matches = line.match(quantityPattern);
+                    
+                    if (matches) {
+                        matches.forEach(match => {
+                            // Extraer solo el número
+                            const numberMatch = match.match(/(\d{1,4})/);
+                            if (numberMatch) {
+                                const quantity = numberMatch[1];
+                                const numValue = parseInt(quantity);
                                 
-                                // Si el número está después del artículo, es probablemente una cantidad
-                                if (articleIndex !== -1 && numberIndex > articleIndex) {
-                                    results.push({ nombre: field, valor: match });
-                                    console.log(`✅ Cantidad inferida en línea ${lineIndex + 1}: ${match}`);
+                                // Validación cruzada: descartar números sospechosos
+                                if (numValue > 0 && numValue <= 9999) {
+                                    // Verificar que no sea un número de orden (CPOV-)
+                                    if (!line.includes('CPOV-') || !line.match(/CPOV-\d+/)) {
+                                        results.push({ nombre: field, valor: quantity });
+                                        console.log(`✅ Cantidad válida encontrada en línea ${lineIndex + 1}: ${quantity} UND`);
+                                    } else {
+                                        console.log(`⚠️ Cantidad descartada (posible número de orden): ${quantity} en línea ${lineIndex + 1}`);
+                                    }
+                                } else {
+                                    console.log(`⚠️ Cantidad fuera de rango: ${quantity} en línea ${lineIndex + 1}`);
                                 }
                             }
-                        }
-                    });
+                        });
+                    }
+                    
+                    // Buscar también cantidades sin "UND" pero con contexto de artículo
+                    const numberOnlyPattern = /\b(\d{1,4})\b/gi;
+                    const numberMatches = line.match(numberOnlyPattern);
+                    
+                    if (numberMatches && line.includes('TUBOS PVC')) {
+                        numberMatches.forEach(match => {
+                            const numValue = parseInt(match);
+                            
+                            // Validación más estricta para números sin "UND"
+                            if (numValue > 0 && numValue <= 9999) {
+                                // Verificar que no sea parte de un número de orden
+                                const orderPattern = /CPOV-\d+/;
+                                if (!orderPattern.test(line)) {
+                                    // Verificar que esté cerca del nombre del artículo
+                                    const articleIndex = line.indexOf('TUBOS PVC');
+                                    const numberIndex = line.indexOf(match);
+                                    
+                                    // Si el número está después del artículo, es probablemente una cantidad
+                                    if (articleIndex !== -1 && numberIndex > articleIndex) {
+                                        results.push({ nombre: field, valor: match });
+                                        console.log(`✅ Cantidad inferida en línea ${lineIndex + 1}: ${match}`);
+                                    }
+                                }
+                            }
+                        });
+                    }
                 }
             });
             
-            // Si no se encontraron cantidades con el método específico, usar fallback más agresivo
+            // Si no se encontraron cantidades con el método específico, usar fallback
             if (results.filter(r => r.nombre === field).length === 0) {
                 console.log('🔄 Usando método de fallback para cantidades...');
                 
@@ -326,40 +325,6 @@ function extractFieldsManually(text, requestedFields) {
                         });
                     }
                 });
-            }
-            
-            // Método final: buscar números en todo el texto que parezcan cantidades
-            if (results.filter(r => r.nombre === field).length === 0) {
-                console.log('🔄 Usando método final para cantidades...');
-                
-                // Buscar números que estén cerca de palabras clave de artículos
-                const allNumbers = text.match(/\b(\d{1,4})\b/gi);
-                if (allNumbers) {
-                    const seenNumbers = new Set();
-                    allNumbers.forEach(match => {
-                        const numValue = parseInt(match);
-                        
-                        if (numValue > 0 && numValue <= 9999 && !seenNumbers.has(match)) {
-                            // Verificar que no sea un número de orden
-                            const orderPattern = new RegExp(`CPOV-${match}`, 'i');
-                            if (!orderPattern.test(text)) {
-                                // Verificar que esté cerca de palabras clave de artículos
-                                const articleKeywords = ['TUBOS', 'PVC', 'CORVI', 'SONACA', 'SDR', 'SCH'];
-                                const hasContext = articleKeywords.some(keyword => {
-                                    const keywordIndex = text.indexOf(keyword);
-                                    const numberIndex = text.indexOf(match);
-                                    return keywordIndex !== -1 && Math.abs(keywordIndex - numberIndex) < 200;
-                                });
-                                
-                                if (hasContext) {
-                                    seenNumbers.add(match);
-                                    results.push({ nombre: field, valor: match });
-                                    console.log(`✅ Cantidad final encontrada: ${match}`);
-                                }
-                            }
-                        }
-                    });
-                }
             }
         }
     });
