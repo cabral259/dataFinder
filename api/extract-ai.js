@@ -173,23 +173,41 @@ function preprocessText(text) {
     return processedText;
 }
 
-// Función de extracción con IA
+// Función de extracción con IA (EXACTAMENTE IGUAL QUE LOCAL)
 async function extractWithAI(text, requestedFields) {
     try {
-        console.log('🤖 Iniciando extracción con Gemini Flash...');
+        console.log('🤖 Iniciando extracción con Gemini Flash (lógica LOCAL)...');
         console.log('📋 Campos solicitados:', requestedFields);
         console.log('📄 Longitud del texto:', text.length);
-
-        // Preprocesar el texto para Vercel
-        text = preprocessText(text);
-
-        // Optimización: Limitar el tamaño del texto para mejor rendimiento (igual que local)
+        
+        // Si el texto está vacío, devolver error
+        if (!text || text.length === 0) {
+            console.log('❌ Error: No se pudo extraer texto del documento');
+            return [];
+        }
+        
+        // Optimización: Limitar el tamaño del texto para mejor rendimiento
         const maxTextLength = 100000; // 100KB máximo (aumentado para archivos más grandes)
         if (text.length > maxTextLength) {
             console.log(`⚠️ Texto muy largo (${text.length} chars). Truncando a ${maxTextLength} chars para mejor rendimiento...`);
             text = text.substring(0, maxTextLength);
         }
-
+        
+        // Verificar que la API key esté configurada
+        if (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY === 'demo-key') {
+            console.log('❌ Error: API key de Gemini no configurada');
+            return [];
+        }
+        
+        // Verificar que la API key sea válida (debe empezar con AIza)
+        if (!process.env.GEMINI_API_KEY.startsWith('AIza')) {
+            console.log('❌ Error: API key de Gemini no es válida (debe empezar con AIza)');
+            console.log('🔑 API key actual:', process.env.GEMINI_API_KEY.substring(0, 20) + '...');
+            console.log('📝 Por favor, obtén una API key válida en: https://aistudio.google.com/');
+            return [];
+        }
+        
+        // Usar Gemini Flash para extracción inteligente con timeout optimizado
         const model = genAI.getGenerativeModel({ 
             model: "gemini-2.0-flash",
             generationConfig: {
@@ -197,27 +215,23 @@ async function extractWithAI(text, requestedFields) {
                 maxOutputTokens: 8000 // Aumentado para documentos más grandes
             }
         });
-
-        const prompt = `Extrae los siguientes campos del documento, procesando línea por línea para evitar mezclar campos de diferentes filas:
-
-- ID de carga
-- Número de orden  
-- Nombre de artículo
-- Cantidad
-
-IMPORTANTE: 
-- Procesa cada línea individualmente
-- Para cantidades, busca solo números de 1-4 dígitos seguidos de "UND" o "UNIDADES"
-- NO mezcles números de orden (CPOV-) con cantidades
-- Solo incluye cantidades que estén claramente asociadas a artículos
+        
+        const prompt = `Extrae EXACTAMENTE estos campos: ${requestedFields.join(', ')}
 
 Documento: ${text.substring(0, 15000)}
 
-Responde SOLO con un JSON en este formato:
-{"campos": [{"nombre": "campo", "valor": "valor"}]}`;
+IMPORTANTE: Responde SOLO con UN objeto JSON en este formato exacto:
+{"campos": [{"nombre": "campo", "valor": "valor"}]}
 
+Reglas:
+- Extrae SOLO campos solicitados
+- Números de orden: valores únicos
+- ID de carga: puede repetirse
+- Cantidades: CADA instancia individual (no agrupar)
+- Extrae TODOS los artículos sin omitir
+- NO incluyas texto adicional, solo el JSON`;
+        
         console.log('🤖 Enviando prompt a Gemini...');
-        console.log('📝 Prompt enviado (primeros 500 chars):', prompt.substring(0, 500));
         const startTime = Date.now();
         
         let aiResponse;
@@ -227,23 +241,23 @@ Responde SOLO con un JSON en este formato:
             console.log(`⚡ Gemini respondió en ${endTime - startTime}ms`);
             const response = await result.response;
             aiResponse = response.text();
-            console.log('🤖 Respuesta de Gemini (primeros 500 chars):', aiResponse.substring(0, 500));
         } catch (geminiError) {
             console.error('❌ Error en Gemini:', geminiError.message);
             console.log('🔄 Usando extracción manual como fallback...');
             return extractFieldsManually(text, requestedFields);
         }
-
+        
         console.log('🤖 Respuesta de Gemini recibida (longitud:', aiResponse.length, 'chars)');
-
-        // Limpiar la respuesta de Gemini
+        
+        // Limpiar la respuesta de Gemini (remover markdown si existe)
         let cleanResponse = aiResponse;
         if (aiResponse.includes('```json')) {
             cleanResponse = aiResponse.replace(/```json\n?/g, '').replace(/```\n?/g, '');
         }
-
+        
         // Intentar parsear la respuesta JSON
         try {
+            // Si hay múltiples objetos JSON, tomar solo el primero
             const firstBrace = cleanResponse.indexOf('{');
             const lastBrace = cleanResponse.lastIndexOf('}');
             
@@ -253,39 +267,24 @@ Responde SOLO con un JSON en este formato:
                 
                 if (parsedData.campos && Array.isArray(parsedData.campos)) {
                     console.log(`✅ Gemini extrajo ${parsedData.campos.length} campos`);
-                    
-                    // Validar y limpiar los datos extraídos
-                    const validatedFields = parsedData.campos.filter(field => {
-                        if (field.nombre && field.valor) {
-                            // Validación específica para cantidades
-                            if (field.nombre.toLowerCase().includes('cantidad')) {
-                                const numValue = parseInt(field.valor);
-                                if (isNaN(numValue) || numValue <= 0 || numValue > 9999) {
-                                    console.log(`⚠️ Cantidad inválida descartada: ${field.valor}`);
-                                    return false;
-                                }
-                            }
-                            return true;
-                        }
-                        return false;
-                    });
-                    
-                    console.log(`✅ ${validatedFields.length} campos válidos después de validación`);
-                    return validatedFields;
+                    return parsedData.campos;
                 } else {
                     console.log('⚠️ Respuesta de Gemini no tiene el formato esperado');
-                    return extractFieldsManually(text, requestedFields);
+                    return [];
                 }
             } else {
                 console.log('⚠️ No se encontró JSON válido en la respuesta');
-                return extractFieldsManually(text, requestedFields);
+                return [];
             }
         } catch (parseError) {
             console.log('⚠️ Error parseando JSON de Gemini:', parseError.message);
-            return extractFieldsManually(text, requestedFields);
+            console.log('📄 Respuesta recibida (primeros 500 chars):', aiResponse.substring(0, 500));
+            return [];
         }
+        
     } catch (error) {
-        console.error('❌ Error en extracción con IA:', error);
+        console.error('❌ Error en extracción con Gemini:', error);
+        console.log('🔄 Usando extracción manual como fallback...');
         return extractFieldsManually(text, requestedFields);
     }
 }
@@ -744,132 +743,103 @@ module.exports = async (req, res) => {
                 const file = files[0];
                 
                 if (file.mimetype === 'application/pdf') {
-                    // Para PDF, usar extracción mejorada específica para Vercel
+                    // USAR EXACTAMENTE LA MISMA LÓGICA QUE LOCAL
                     try {
-                        console.log('📄 Procesando archivo PDF en Vercel...');
+                        console.log('📄 Procesando archivo PDF usando lógica LOCAL...');
                         
-                        // INTENTAR PRIMERO CON pdfjs-dist (método preferido)
-                        console.log('🔄 Intentando extracción con pdfjs-dist...');
-                        let extractedTextFromPdfJS = await extractPDFWithPdfJS(file.buffer);
+                        // Importar la clase ExtractorDatos del servidor local
+                        const ExtractorDatos = require('../index');
+                        const extractor = new ExtractorDatos();
                         
-                        if (extractedTextFromPdfJS && extractedTextFromPdfJS.length > 100) {
-                            console.log('✅ Usando extracción de pdfjs-dist');
-                            extractedText = extractedTextFromPdfJS;
-                        } else {
-                            console.log('⚠️ pdfjs-dist falló, usando pdf-parse como fallback');
-                            
-                            // Fallback a pdf-parse
-                            const pdfParse = require('pdf-parse');
-                            
-                            // Opciones específicas para Vercel (mejoradas para preservar estructura)
-                            const options = {
-                                normalizeWhitespace: false, // Cambiado a false para preservar espacios
-                                disableCombineTextItems: true, // Cambiado a true para mantener estructura
-                                preserveWhitespace: true,
-                                max: 0, // Sin límite de páginas
-                                version: 'v2.0.550'
-                            };
-                            
-                            const pdfData = await pdfParse(file.buffer, options);
-                            extractedText = pdfData.text;
+                        // Crear un archivo temporal para usar la lógica local
+                        const tempFilePath = `/tmp/${Date.now()}-${file.originalname}`;
+                        require('fs').writeFileSync(tempFilePath, file.buffer);
+                        
+                        console.log('📄 Archivo temporal creado:', tempFilePath);
+                        
+                        // Usar exactamente la misma lógica que local
+                        const textResult = await extractor.extractFromMultipleFiles([tempFilePath], {
+                            extractionType: 'all'
+                        });
+                        
+                        console.log('📄 Resultado de extracción local:', textResult);
+                        
+                        if (!textResult || textResult.length === 0) {
+                            throw new Error('No se pudo extraer texto del documento');
                         }
                         
-                        console.log(`📄 Texto extraído del PDF: ${extractedText.length} caracteres`);
-                        console.log(`📄 Número de páginas detectadas: ${pdfData?.numpages || 'Desconocido'}`);
+                        // Obtener el texto del resultado (misma lógica que local)
+                        const firstResult = textResult[0];
+                        let fullText = '';
                         
-                        // Log de una muestra del texto para debugging
-                        const sampleText = extractedText.substring(0, 1000);
-                        console.log('📄 Muestra del texto extraído (primeros 1000 chars):', sampleText);
-                        
-                        // Limpieza específica para Vercel (más conservadora)
-                        console.log('🔧 Aplicando limpieza específica para Vercel...');
-                        console.log('📄 Texto original (primeros 500 chars):', extractedText.substring(0, 500));
-                        
-                        // LIMPIEZA MÍNIMA: Solo normalizar saltos de línea básicos
-                        console.log('📄 Aplicando limpieza mínima...');
-                        
-                        // Solo normalizar saltos de línea (sin tocar espacios)
-                        const originalText = extractedText;
-                        extractedText = extractedText
-                            .replace(/\r\n/g, '\n')
-                            .replace(/\r/g, '\n');
-                        
-                        console.log('📄 Texto después de normalizar saltos de línea (primeros 500 chars):', extractedText.substring(0, 500));
-                        
-                        // Verificar si hubo cambios significativos
-                        if (originalText !== extractedText) {
-                            console.log('⚠️ Se aplicaron cambios en saltos de línea');
-                        } else {
-                            console.log('✅ No se aplicaron cambios en saltos de línea');
+                        if (firstResult.success && firstResult.data) {
+                            // Para PDF, Word, Text
+                            if (firstResult.data.text) {
+                                fullText = firstResult.data.text;
+                            }
+                            // Para Excel, convertir a texto
+                            else if (firstResult.data.sheets) {
+                                fullText = firstResult.data.sheets.map(sheet => 
+                                    sheet.data.map(row => row.join(' ')).join('\n')
+                                ).join('\n');
+                            }
                         }
                         
-                        // NO APLICAR LIMPIEZA ADICIONAL - preservar estructura original
-                        console.log('📄 Preservando estructura original del texto');
-                        console.log(`📄 Longitud final: ${extractedText.length} caracteres`);
-                        console.log('📄 Texto final (primeros 500 chars):', extractedText.substring(0, 500));
+                        extractedText = fullText;
                         
-                        // Buscar cantidades específicas en el texto para verificar
-                        const quantityMatches = extractedText.match(/\b(\d{1,4})\s*UND\b/gi);
-                        console.log('🔍 Cantidades encontradas en el texto:', quantityMatches);
+                        console.log('📄 Texto extraído usando lógica LOCAL:');
+                        console.log('📄 Longitud:', extractedText.length);
+                        console.log('📄 Muestra (primeros 1000 chars):', extractedText.substring(0, 1000));
                         
-                        // Buscar patrones problemáticos que puedan estar causando el "1" extra
-                        const problematicPatterns = extractedText.match(/(?:1\s*)?(\d+)\s+UND/gi);
-                        console.log('⚠️ Patrones problemáticos encontrados:', problematicPatterns);
-                        
-                        // Buscar números que empiecen con 1 seguidos de otros números
-                        const onePattern = extractedText.match(/1(\d+)\s+UND/gi);
-                        console.log('🔍 Números que empiezan con 1:', onePattern);
-                        
-                        // Buscar la sección problemática específicamente
-                        const beforeSection = extractedText.substring(0, extractedText.indexOf('CPOV-000009911'));
-                        const afterSection = extractedText.substring(extractedText.indexOf('CPOV-000009911'));
-                        
-                        console.log('📄 Sección ANTES de CPOV-000009911 (primeros 500 chars):', beforeSection.substring(0, 500));
-                        console.log('📄 Sección DESPUÉS de CPOV-000009911 (primeros 500 chars):', afterSection.substring(0, 500));
-                        
-                        // Buscar cantidades en cada sección
-                        const beforeQuantities = beforeSection.match(/\b(\d{1,4})\s*UND\b/gi);
-                        const afterQuantities = afterSection.match(/\b(\d{1,4})\s*UND\b/gi);
-                        
-                        console.log('🔍 Cantidades ANTES de CPOV-000009911:', beforeQuantities);
-                        console.log('🔍 Cantidades DESPUÉS de CPOV-000009911:', afterQuantities);
-                        
-                        if (extractedText.length < 100) {
-                            console.warn('⚠️ Texto extraído muy corto, puede haber problemas con el PDF');
+                        // Limpiar archivo temporal
+                        if (require('fs').existsSync(tempFilePath)) {
+                            require('fs').unlinkSync(tempFilePath);
                         }
-                        
-                        // Aplicar preprocesamiento adicional específico para Vercel
-                        console.log('🔄 ANTES de preprocessText:');
-                        console.log('📄 Longitud:', extractedText.length);
-                        console.log('📄 Muestra:', extractedText.substring(0, 300));
-                        
-                        // TEMPORALMENTE DESACTIVADO: preprocessText(extractedText);
-                        console.log('⚠️ preprocessText() DESACTIVADO temporalmente');
-                        
-                        console.log('🔄 DESPUÉS de preprocessText (sin cambios):');
-                        console.log('📄 Longitud:', extractedText.length);
-                        console.log('📄 Muestra:', extractedText.substring(0, 300));
-                        
-                        // Aplicar correcciones específicas para problemas de Vercel
-                        console.log('🔄 ANTES de fixVercelSpecificIssues:');
-                        console.log('📄 Longitud:', extractedText.length);
-                        console.log('📄 Muestra:', extractedText.substring(0, 300));
-                        
-                        // TEMPORALMENTE DESACTIVADO: fixVercelSpecificIssues(extractedText);
-                        console.log('⚠️ fixVercelSpecificIssues() DESACTIVADO temporalmente');
-                        
-                        console.log('🔄 DESPUÉS de fixVercelSpecificIssues (sin cambios):');
-                        console.log('📄 Longitud:', extractedText.length);
-                        console.log('📄 Muestra:', extractedText.substring(0, 300));
                         
                     } catch (pdfError) {
-                        console.error('❌ Error extrayendo PDF:', pdfError.message);
-                        extractedText = 'PDF procesado - contenido no extraíble';
+                        console.error('❌ Error usando lógica local:', pdfError.message);
+                        
+                        // Fallback a método anterior si falla
+                        console.log('🔄 Usando fallback a pdf-parse...');
+                        const pdfParse = require('pdf-parse');
+                        const pdfData = await pdfParse(file.buffer);
+                        extractedText = pdfData.text;
                     }
                 } else {
-                    extractedText = file.buffer.toString('utf8');
-                    // Preprocesar también texto plano
-                    extractedText = preprocessText(extractedText);
+                    // Para otros tipos de archivo, usar la misma lógica local
+                    try {
+                        console.log('📄 Procesando archivo no-PDF usando lógica LOCAL...');
+                        
+                        const ExtractorDatos = require('../index');
+                        const extractor = new ExtractorDatos();
+                        
+                        const tempFilePath = `/tmp/${Date.now()}-${file.originalname}`;
+                        require('fs').writeFileSync(tempFilePath, file.buffer);
+                        
+                        const textResult = await extractor.extractFromMultipleFiles([tempFilePath], {
+                            extractionType: 'all'
+                        });
+                        
+                        if (textResult && textResult.length > 0) {
+                            const firstResult = textResult[0];
+                            if (firstResult.success && firstResult.data && firstResult.data.text) {
+                                extractedText = firstResult.data.text;
+                            } else {
+                                extractedText = file.buffer.toString('utf8');
+                            }
+                        } else {
+                            extractedText = file.buffer.toString('utf8');
+                        }
+                        
+                        // Limpiar archivo temporal
+                        if (require('fs').existsSync(tempFilePath)) {
+                            require('fs').unlinkSync(tempFilePath);
+                        }
+                        
+                    } catch (error) {
+                        console.error('❌ Error procesando archivo:', error.message);
+                        extractedText = file.buffer.toString('utf8');
+                    }
                 }
 
                         // Extraer datos con IA mejorada
