@@ -467,9 +467,10 @@ function extractFieldsManually(text, requestedFields) {
     return results;
 }
 
-// Función para generar Excel
+// Función para generar Excel (LÓGICA SIMPLE COMO LOCAL)
 function generateExcel(structuredData) {
-    console.log('📊 Generando Excel con', structuredData.length, 'campos extraídos...');
+    console.log('📊 Generando Excel con lógica LOCAL...');
+    console.log('📊 Datos estructurados recibidos:', structuredData.length, 'campos');
     
     const workbook = XLSX.utils.book_new();
     const allData = [];
@@ -478,148 +479,49 @@ function generateExcel(structuredData) {
     const headers = ['ID de carga', 'Número de orden', 'Nombre de artículo', 'Cantidad'];
     allData.push(headers);
 
-    // Agrupar datos por categoría
+    // Agrupar datos por categoría (LÓGICA SIMPLE)
     const groupedData = {};
     structuredData.forEach(item => {
-        const category = item.label || item.nombre;
+        const category = item.label;
         if (!groupedData[category]) {
             groupedData[category] = [];
         }
-        groupedData[category].push(item.value || item.valor);
+        groupedData[category].push(item.value);
     });
 
     console.log('📊 Datos agrupados:', groupedData);
 
-    // Obtener ID de carga (siempre el primero)
+    // Obtener datos agrupados
     const loadIds = groupedData['ID de carga'] || [];
-    const loadId = loadIds.length > 0 ? loadIds[0] : '';
-
-    // Obtener todos los números de orden únicos
     const orderNumbers = groupedData['Número de orden'] || [];
-    const uniqueOrders = [...new Set(orderNumbers)];
-
-    // Obtener todos los nombres de artículos
     const articleNames = groupedData['Nombre de artículo'] || [];
-
-    // Obtener todas las cantidades
     const quantities = groupedData['Cantidad'] || [];
 
     console.log('📊 Datos extraídos:');
-    console.log('- ID de carga:', loadId);
-    console.log('- Números de orden:', uniqueOrders);
+    console.log('- ID de carga:', loadIds);
+    console.log('- Números de orden:', orderNumbers);
     console.log('- Nombres de artículos:', articleNames);
     console.log('- Cantidades:', quantities);
 
-    // Crear registros usando método mejorado
+    // Crear registros usando lógica simple (como local)
     const records = [];
     
-    // Método 1: Procesar datos secuencialmente para mantener relaciones exactas
-    if (structuredData && structuredData.length > 0) {
-        console.log('🔄 Usando método secuencial para mantener relaciones exactas...');
+    // Método simple: crear registros secuencialmente
+    const maxLength = Math.max(orderNumbers.length, articleNames.length, quantities.length);
+    
+    for (let i = 0; i < maxLength; i++) {
+        const record = {
+            loadId: loadIds[0] || '', // Usar el primer ID de carga
+            orderNumber: orderNumbers[i] || '',
+            articleName: articleNames[i] || '',
+            quantity: quantities[i] || ''
+        };
         
-        // Crear un mapa para mantener las relaciones orden-artículo-cantidad
-        const orderArticleQuantityMap = new Map();
-        let currentOrder = '';
-        let currentArticle = '';
-        let currentQuantities = [];
-        
-        // Primera pasada: identificar relaciones orden-artículo-cantidad
-        for (let i = 0; i < structuredData.length; i++) {
-            const item = structuredData[i];
-            const label = item.label || item.nombre || '';
-            const value = item.value || item.valor || '';
-            
-            if (label.toLowerCase().includes('número de orden') || label.toLowerCase().includes('numero de orden') || label.toLowerCase().includes('order number')) {
-                // Si tenemos datos acumulados, guardar la relación
-                if (currentOrder && currentArticle) {
-                    const key = `${currentOrder}|${currentArticle}`;
-                    orderArticleQuantityMap.set(key, currentQuantities);
-                    console.log(`📋 Relación guardada: ${currentOrder} | ${currentArticle} | Cantidades: [${currentQuantities.join(', ')}]`);
-                }
-                
-                // Iniciar nuevo registro
-                currentOrder = value;
-                currentArticle = '';
-                currentQuantities = [];
-                console.log(`📋 Nuevo orden: ${currentOrder}`);
-                
-            } else if (label.toLowerCase().includes('nombre de artículo') || label.toLowerCase().includes('nombre de articulo') || label.toLowerCase().includes('article name')) {
-                currentArticle = value;
-                console.log(`📋 Artículo: ${currentArticle}`);
-                
-            } else if (label.toLowerCase().includes('cantidad')) {
-                currentQuantities.push(value);
-                console.log(`📋 Cantidad agregada: ${value} para orden: ${currentOrder}`);
-            }
-        }
-        
-        // Guardar el último registro
-        if (currentOrder && currentArticle) {
-            const key = `${currentOrder}|${currentArticle}`;
-            orderArticleQuantityMap.set(key, currentQuantities);
-            console.log(`📋 Última relación guardada: ${currentOrder} | ${currentArticle} | Cantidades: [${currentQuantities.join(', ')}]`);
-        }
-        
-        console.log('📋 Mapa completo de relaciones:', orderArticleQuantityMap);
-        
-        // Segunda pasada: crear registros con las relaciones exactas
-        for (const [key, quantities] of orderArticleQuantityMap) {
-            const [order, article] = key.split('|');
-            
-            if (quantities.length > 0) {
-                // Crear un registro por cada cantidad
-                for (const quantity of quantities) {
-                    records.push({
-                        loadId: loadId,
-                        orderNumber: order,
-                        articleName: article,
-                        quantity: quantity
-                    });
-                    console.log(`📝 Registro creado: ${order} | ${article} | ${quantity}`);
-                }
-            } else {
-                // Si no hay cantidades, crear registro vacío
-                records.push({
-                    loadId: loadId,
-                    orderNumber: order,
-                    articleName: article,
-                    quantity: ''
-                });
-                console.log(`📝 Registro vacío creado: ${order} | ${article} | (sin cantidad)`);
-            }
-        }
-        
-        // Si no se crearon registros, usar método de fallback
-        if (records.length === 0) {
-            console.log('🔄 Usando método de fallback para crear registros...');
-            
-            // Crear combinaciones de orden + artículo + cantidad
-            const seenCombinations = new Set();
-            
-            for (let i = 0; i < orderNumbers.length; i++) {
-                const orderNumber = orderNumbers[i];
-                const articleName = articleNames[i] || '';
-                const quantity = quantities[i] || '';
-                
-                const combination = `${orderNumber}|${articleName}`;
-                
-                if (!seenCombinations.has(combination) && articleName) {
-                    seenCombinations.add(combination);
-                    records.push({
-                        loadId: loadId,
-                        orderNumber: orderNumber,
-                        articleName: articleName,
-                        quantity: quantity
-                    });
-                }
-            }
-        }
+        records.push(record);
+        console.log(`📝 Registro ${i + 1}: ${record.orderNumber} | ${record.articleName} | ${record.quantity}`);
     }
 
-    console.log('📊 Registros creados:', records.length);
-    records.forEach((record, index) => {
-        console.log(`${index + 1}. ${record.orderNumber} | ${record.articleName} | ${record.quantity}`);
-    });
+    console.log('📊 Total de registros creados:', records.length);
 
     // Crear filas de datos
     records.forEach(record => {
@@ -769,7 +671,7 @@ module.exports = async (req, res) => {
                     extractedText = file.buffer.toString('utf8');
                 }
 
-                        // Extraer datos con IA mejorada
+                // Extraer datos con IA mejorada
         console.log('🔍 Iniciando extracción con IA mejorada...');
         const extractedData = await extractWithAI(extractedText, requestedFields);
         console.log('📊 Datos extraídos con IA:', extractedData.length, 'campos');
@@ -807,26 +709,61 @@ module.exports = async (req, res) => {
             }
         });
 
-                if (extractedData.length === 0) {
-                    console.error('❌ No se pudieron extraer datos del archivo');
-                    return res.status(500).json({
-                        success: false,
-                        error: 'No se pudieron extraer datos del archivo'
+        if (extractedData.length === 0) {
+            console.error('❌ No se pudieron extraer datos del archivo');
+            return res.status(500).json({
+                success: false,
+                error: 'No se pudieron extraer datos del archivo'
+            });
+        }
+
+        // Log de los primeros datos para debugging
+        console.log('📋 Primeros 3 datos extraídos:', extractedData.slice(0, 3));
+        
+        // Log detallado de todos los datos extraídos
+        console.log('📊 Todos los datos extraídos:');
+        extractedData.forEach((item, index) => {
+            console.log(`${index + 1}. ${item.nombre || item.label}: "${item.valor || item.value}"`);
+        });
+
+        // USAR EXACTAMENTE LA MISMA LÓGICA QUE LOCAL
+        console.log('🔄 Formateando resultados usando lógica LOCAL...');
+        
+        // Formatear resultados y eliminar duplicados de números de orden (LÓGICA LOCAL)
+        const structuredData = [];
+        const seenOrderNumbers = new Set();
+        
+        extractedData.forEach(field => {
+            const isOrderNumber = field.nombre.toLowerCase().includes('número de orden') || 
+                                 field.nombre.toLowerCase().includes('numero de orden') ||
+                                 field.nombre.toLowerCase().includes('order number');
+            
+            if (isOrderNumber) {
+                // Para números de orden, verificar duplicados
+                if (!seenOrderNumbers.has(field.valor)) {
+                    seenOrderNumbers.add(field.valor);
+                    structuredData.push({
+                        label: field.nombre,
+                        value: field.valor
                     });
                 }
-
-                // Log de los primeros datos para debugging
-                console.log('📋 Primeros 3 datos extraídos:', extractedData.slice(0, 3));
-                
-                // Log detallado de todos los datos extraídos
-                console.log('📊 Todos los datos extraídos:');
-                extractedData.forEach((item, index) => {
-                    console.log(`${index + 1}. ${item.nombre || item.label}: "${item.valor || item.value}"`);
+            } else {
+                // Para otras categorías, agregar normalmente
+                structuredData.push({
+                    label: field.nombre,
+                    value: field.valor
                 });
+            }
+        });
+        
+        console.log('📊 Datos estructurados (lógica LOCAL):', structuredData.length, 'campos');
+        structuredData.forEach((item, index) => {
+            console.log(`${index + 1}. ${item.label}: "${item.value}"`);
+        });
 
-                // Generar Excel
-                console.log('📊 Generando archivo Excel...');
-                const excelBuffer = generateExcel(extractedData);
+        // Generar Excel usando la lógica LOCAL
+        console.log('📊 Generando archivo Excel...');
+        const excelBuffer = generateExcel(structuredData);
 
                 // Enviar respuesta
                 console.log('📤 Enviando archivo Excel...');
