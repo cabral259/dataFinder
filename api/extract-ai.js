@@ -267,9 +267,9 @@ function extractFieldsManually(text, requestedFields) {
     return results;
 }
 
-// Función para generar Excel (LÓGICA MEJORADA PARA MANTENER RELACIONES)
+// Función para generar Excel (LÓGICA SIMPLE COMO LOCAL)
 function generateExcel(structuredData) {
-    console.log('📊 Generando Excel con lógica LOCAL mejorada...');
+    console.log('📊 Generando Excel con lógica LOCAL...');
     console.log('📊 Datos estructurados recibidos:', structuredData.length, 'campos');
     
     const workbook = XLSX.utils.book_new();
@@ -279,7 +279,7 @@ function generateExcel(structuredData) {
     const headers = ['ID de carga', 'Número de orden', 'Código de artículo', 'Cantidad'];
     allData.push(headers);
 
-    // Agrupar datos por categoría
+    // Agrupar datos por categoría (LÓGICA SIMPLE)
     const groupedData = {};
     structuredData.forEach(item => {
         const category = item.label;
@@ -303,73 +303,22 @@ function generateExcel(structuredData) {
     console.log('- Códigos de artículo:', articleCodes);
     console.log('- Cantidades:', quantities);
 
-    // Crear registros manteniendo relaciones
+    // Crear registros usando lógica simple (como local)
     const records = [];
-    const loadId = loadIds[0] || '';
     
-    // Método 1: Procesar por órdenes y sus códigos de artículo asociados
-    if (orderNumbers.length > 0 && articleCodes.length > 0) {
-        console.log('🔄 Procesando por relaciones orden-código de artículo...');
-        
-        // Crear un mapa de órdenes con sus códigos de artículo
-        const orderArticleCodeMap = new Map();
-        
-        // Buscar códigos de artículo asociados a cada orden en el texto original
-        orderNumbers.forEach(orderNumber => {
-            const orderSection = structuredData.find(item => 
-                item.label === 'Código de artículo' && 
-                item.value && 
-                item.value.match(/\d{6}-\d{3}/)
-            );
-            
-            if (orderSection) {
-                if (!orderArticleCodeMap.has(orderNumber)) {
-                    orderArticleCodeMap.set(orderNumber, []);
-                }
-                orderArticleCodeMap.get(orderNumber).push(orderSection.value);
-            }
-        });
-        
-        console.log('📋 Mapa de relaciones orden-código de artículo:', orderArticleCodeMap);
-        
-        // Crear registros para cada orden con sus códigos de artículo
-        for (const [orderNumber, articleCodes] of orderArticleCodeMap) {
-            articleCodes.forEach(articleCode => {
-                // Buscar cantidad asociada a este código de artículo
-                const quantity = quantities.find(q => {
-                    // Buscar cantidad que esté cerca del código de artículo en el texto
-                    return q && q.includes('UND');
-                }) || '';
-                
-                records.push({
-                    loadId: loadId,
-                    orderNumber: orderNumber,
-                    articleCode: articleCode,
-                    quantity: quantity.replace(/\s+UND.*/, '') || ''
-                });
-                
-                console.log(`📝 Registro creado: ${orderNumber} | ${articleCode} | ${quantity}`);
-            });
-        }
-    }
+    // Método simple: crear registros secuencialmente
+    const maxLength = Math.max(orderNumbers.length, articleCodes.length, quantities.length);
     
-    // Método 2: Si no se crearon registros, usar método secuencial
-    if (records.length === 0) {
-        console.log('🔄 Usando método secuencial como fallback...');
+    for (let i = 0; i < maxLength; i++) {
+        const record = {
+            loadId: loadIds[0] || '', // Usar el primer ID de carga
+            orderNumber: orderNumbers[i] || '',
+            articleCode: articleCodes[i] || '',
+            quantity: quantities[i] ? quantities[i].replace(/\s+UND.*/, '') : ''
+        };
         
-        const maxLength = Math.max(orderNumbers.length, articleCodes.length, quantities.length);
-        
-        for (let i = 0; i < maxLength; i++) {
-            const record = {
-                loadId: loadId,
-                orderNumber: orderNumbers[i] || '',
-                articleCode: articleCodes[i] || '',
-                quantity: quantities[i] ? quantities[i].replace(/\s+UND.*/, '') : ''
-            };
-            
-            records.push(record);
-            console.log(`📝 Registro ${i + 1}: ${record.orderNumber} | ${record.articleCode} | ${record.quantity}`);
-        }
+        records.push(record);
+        console.log(`📝 Registro ${i + 1}: ${record.orderNumber} | ${record.articleCode} | ${record.quantity}`);
     }
 
     console.log('📊 Total de registros creados:', records.length);
