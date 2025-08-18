@@ -13,296 +13,122 @@ const upload = multer({
 // Configuración de Gemini
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// Función de extracción con IA (EXACTAMENTE IGUAL QUE LOCAL)
+// Función de extracción con IA simplificada
 async function extractWithAI(text, requestedFields) {
     try {
-        console.log('🤖 Iniciando extracción con Gemini Flash (lógica LOCAL)...');
-        console.log('📋 Campos solicitados:', requestedFields);
-        console.log('📄 Longitud del texto:', text.length);
+        console.log('🤖 Iniciando extracción con Gemini Flash...');
         
-        // Si el texto está vacío, devolver error
         if (!text || text.length === 0) {
-            console.log('❌ Error: No se pudo extraer texto del documento');
+            console.log('❌ Error: Texto vacío');
             return [];
         }
         
-        // Optimización: Limitar el tamaño del texto para mejor rendimiento
-        const maxTextLength = 100000; // 100KB máximo (aumentado para archivos más grandes)
-        if (text.length > maxTextLength) {
-            console.log(`⚠️ Texto muy largo (${text.length} chars). Truncando a ${maxTextLength} chars para mejor rendimiento...`);
-            text = text.substring(0, maxTextLength);
-        }
-        
-        // Verificar que la API key esté configurada
-        if (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY === 'demo-key') {
-            console.log('❌ Error: API key de Gemini no configurada');
+        if (!process.env.GEMINI_API_KEY) {
+            console.log('❌ Error: API key no configurada');
             return [];
         }
         
-        // Verificar que la API key sea válida (debe empezar con AIza)
-        if (!process.env.GEMINI_API_KEY.startsWith('AIza')) {
-            console.log('❌ Error: API key de Gemini no es válida (debe empezar con AIza)');
-            console.log('🔑 API key actual:', process.env.GEMINI_API_KEY.substring(0, 20) + '...');
-            console.log('📝 Por favor, obtén una API key válida en: https://aistudio.google.com/');
-            return [];
-        }
-        
-        // Usar Gemini Flash para extracción inteligente con timeout optimizado
         const model = genAI.getGenerativeModel({ 
             model: "gemini-2.0-flash",
             generationConfig: {
-                temperature: 0.1, // Más determinístico para mejor rendimiento
-                maxOutputTokens: 8000 // Aumentado para documentos más grandes
+                temperature: 0.1,
+                maxOutputTokens: 8000
             }
         });
         
-        const prompt = `Extrae EXACTAMENTE estos campos: ${requestedFields.join(', ')}
+        const prompt = `Extrae estos campos: ${requestedFields.join(', ')}
 
 Documento: ${text.substring(0, 15000)}
 
-IMPORTANTE: Responde SOLO con UN objeto JSON en este formato exacto:
-{"campos": [{"nombre": "campo", "valor": "valor"}]}
-
-Reglas:
-- Extrae SOLO campos solicitados
-- Números de orden: valores únicos
-- ID de carga: puede repetirse
-- Cantidades: CADA instancia individual (no agrupar)
-- Extrae TODOS los artículos sin omitir
-- NO incluyas texto adicional, solo el JSON`;
+Responde SOLO con JSON en este formato:
+{"campos": [{"nombre": "campo", "valor": "valor"}]}`;
         
-        console.log('🤖 Enviando prompt a Gemini...');
-        const startTime = Date.now();
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        const aiResponse = response.text();
         
-        let aiResponse;
-        try {
-            const result = await model.generateContent(prompt);
-            const endTime = Date.now();
-            console.log(`⚡ Gemini respondió en ${endTime - startTime}ms`);
-            const response = await result.response;
-            aiResponse = response.text();
-        } catch (geminiError) {
-            console.error('❌ Error en Gemini:', geminiError.message);
-            console.log('🔄 Usando extracción manual como fallback...');
-            return extractFieldsManually(text, requestedFields);
-        }
-        
-        console.log('🤖 Respuesta de Gemini recibida (longitud:', aiResponse.length, 'chars)');
-        
-        // Limpiar la respuesta de Gemini (remover markdown si existe)
+        // Limpiar respuesta
         let cleanResponse = aiResponse;
         if (aiResponse.includes('```json')) {
             cleanResponse = aiResponse.replace(/```json\n?/g, '').replace(/```\n?/g, '');
         }
         
-        // Intentar parsear la respuesta JSON
-        try {
-            // Si hay múltiples objetos JSON, tomar solo el primero
-            const firstBrace = cleanResponse.indexOf('{');
-            const lastBrace = cleanResponse.lastIndexOf('}');
+        // Parsear JSON
+        const firstBrace = cleanResponse.indexOf('{');
+        const lastBrace = cleanResponse.lastIndexOf('}');
+        
+        if (firstBrace !== -1 && lastBrace !== -1) {
+            const jsonString = cleanResponse.substring(firstBrace, lastBrace + 1);
+            const parsedData = JSON.parse(jsonString);
             
-            if (firstBrace !== -1 && lastBrace !== -1) {
-                const jsonString = cleanResponse.substring(firstBrace, lastBrace + 1);
-                const parsedData = JSON.parse(jsonString);
-                
-                if (parsedData.campos && Array.isArray(parsedData.campos)) {
-                    console.log(`✅ Gemini extrajo ${parsedData.campos.length} campos`);
-                    return parsedData.campos;
-                } else {
-                    console.log('⚠️ Respuesta de Gemini no tiene el formato esperado');
-                    return [];
-                }
-            } else {
-                console.log('⚠️ No se encontró JSON válido en la respuesta');
-                return [];
+            if (parsedData.campos && Array.isArray(parsedData.campos)) {
+                console.log(`✅ Gemini extrajo ${parsedData.campos.length} campos`);
+                return parsedData.campos;
             }
-        } catch (parseError) {
-            console.log('⚠️ Error parseando JSON de Gemini:', parseError.message);
-            console.log('📄 Respuesta recibida (primeros 500 chars):', aiResponse.substring(0, 500));
-            return [];
         }
         
+        console.log('⚠️ Fallback a extracción manual');
+        return extractFieldsManually(text, requestedFields);
+        
     } catch (error) {
-        console.error('❌ Error en extracción con Gemini:', error);
-        console.log('🔄 Usando extracción manual como fallback...');
+        console.error('❌ Error en Gemini:', error.message);
         return extractFieldsManually(text, requestedFields);
     }
 }
 
-// Función de extracción manual como fallback (EXACTAMENTE IGUAL QUE LOCAL)
+// Función de extracción manual simplificada
 function extractFieldsManually(text, requestedFields) {
     console.log('🔍 Iniciando extracción manual...');
     const results = [];
     
-    requestedFields.forEach(field => {
-        const fieldLower = field.toLowerCase().trim();
-        console.log(`🔍 Buscando campo: "${field}"`);
-        
-        if (fieldLower.includes('orden') || fieldLower.includes('order')) {
-            // Buscar números de orden
-            const orderPatterns = [
-                /CPOV-\d+/gi,
-                /(?:Número de orden|Order):\s*([A-Z0-9\-]+)/gi
-            ];
-            
-            const seenOrderNumbers = new Set();
-            
-            orderPatterns.forEach(pattern => {
-                const matches = text.match(pattern);
-                if (matches) {
-                    matches.forEach(match => {
-                        const cleanMatch = match.trim();
-                        if (!seenOrderNumbers.has(cleanMatch)) {
-                            seenOrderNumbers.add(cleanMatch);
-                            results.push({ nombre: field, valor: cleanMatch });
-                            console.log(`✅ Encontrado orden único: ${cleanMatch}`);
-                        }
-                    });
-                }
-            });
-            
-            // Para cada orden encontrada, buscar sus códigos de artículo asociados
-            const orderNumbers = Array.from(seenOrderNumbers);
-            console.log('🔍 Buscando códigos de artículo para órdenes:', orderNumbers);
-            
-            orderNumbers.forEach(orderNumber => {
-                // Buscar códigos de artículo asociados a esta orden (múltiples formatos)
-                const orderSection = text.split(orderNumber)[1] || text;
-                console.log(`🔍 Sección después de ${orderNumber} (primeros 200 chars):`, orderSection.substring(0, 200));
-                
-                // Patrones para diferentes formatos de códigos de artículo
-                const articleCodePatterns = [
-                    /\d{3}-\d{4}/gi,  // 320-0400, 326-0075
-                    /P\d{4}/gi,       // P1106
-                    /\d{6}-\d{3}/gi   // 101643-250 (formato original)
-                ];
-                
-                let articleCodeMatches = [];
-                articleCodePatterns.forEach(pattern => {
-                    const matches = orderSection.match(pattern);
-                    if (matches) {
-                        articleCodeMatches = articleCodeMatches.concat(matches);
-                    }
-                });
-                
-                console.log(`🔍 Códigos encontrados para ${orderNumber}:`, articleCodeMatches);
-                
-                if (articleCodeMatches.length > 0) {
-                    articleCodeMatches.forEach(articleCode => {
-                        const cleanArticleCode = articleCode.trim();
-                        if (cleanArticleCode.length > 8) { // Filtrar códigos válidos (formato: 101643-250)
-                            results.push({ nombre: 'Código de artículo', valor: cleanArticleCode });
-                            console.log(`✅ Encontrado código de artículo: ${cleanArticleCode}`);
-                        }
-                    });
-                } else {
-                    console.log(`⚠️ No se encontraron códigos de artículo para orden: ${orderNumber}`);
-                }
-            });
-        }
-        
-        if (fieldLower.includes('carga') || fieldLower.includes('load')) {
-            // Buscar IDs de carga (sin eliminar duplicados)
-            const loadPatterns = [
-                /CG-\d+/gi,
-                /(?:ID de carga|Load ID):\s*([A-Z0-9\-]+)/gi
-            ];
-            
-            loadPatterns.forEach(pattern => {
-                const matches = text.match(pattern);
-                if (matches) {
-                    matches.forEach(match => {
-                        results.push({ nombre: field, valor: match.trim() });
-                        console.log(`✅ Encontrado ID de carga: ${match.trim()}`);
-                    });
-                }
-            });
-        }
-        
-        if (fieldLower.includes('envío') || fieldLower.includes('envio') || fieldLower.includes('shipment')) {
-            // Buscar IDs de envío
-            const shipmentPatterns = [
-                /ENV-\d+/gi,
-                /(?:ID de envío|Shipment ID):\s*([A-Z0-9\-]+)/gi
-            ];
-            
-            shipmentPatterns.forEach(pattern => {
-                const matches = text.match(pattern);
-                if (matches) {
-                    matches.forEach(match => {
-                        results.push({ nombre: field, valor: match.trim() });
-                        console.log(`✅ Encontrado ID de envío: ${match.trim()}`);
-                    });
-                }
-            });
-        }
-        
-        if (fieldLower.includes('código artículo') || fieldLower.includes('codigo articulo') || fieldLower.includes('article code')) {
-            // Buscar códigos de artículo (múltiples formatos)
-            const articleCodePatterns = [
-                /\d{3}-\d{4}/gi,  // 320-0400, 326-0075
-                /P\d{4}/gi,       // P1106
-                /\d{6}-\d{3}/gi,  // 101643-250 (formato original)
-                /(?:Código de artículo|Article Code):\s*([A-Z0-9\-]+)/gi
-            ];
-            
-            articleCodePatterns.forEach(pattern => {
-                const matches = text.match(pattern);
-                if (matches) {
-                    matches.forEach(match => {
-                        results.push({ nombre: field, valor: match.trim() });
-                        console.log(`✅ Encontrado código de artículo: ${match.trim()}`);
-                    });
-                }
-            });
-        }
-        
-        if (fieldLower.includes('cantidad')) {
-            // Buscar cantidades (EXACTAMENTE COMO LOCAL)
-            const quantityPatterns = [
-                /\d+\s+(?:UND|UNIDADES|PCS|PIEZAS)/gi,
-                /(?:Cantidad|Quantity):\s*(\d+)/gi,
-                /(\d+)\s+UND/gi
-            ];
-            
-            quantityPatterns.forEach(pattern => {
-                const matches = text.match(pattern);
-                if (matches) {
-                    matches.forEach(match => {
-                        results.push({ nombre: field, valor: match.trim() });
-                        console.log(`✅ Encontrado cantidad: ${match.trim()}`);
-                    });
-                }
-            });
-            
-            // Buscar cantidades en formato específico del documento
-            const specificQuantityMatches = text.match(/(\d+)\s+UND/gi);
-            if (specificQuantityMatches) {
-                specificQuantityMatches.forEach(match => {
-                    results.push({ nombre: field, valor: match.trim() });
-                    console.log(`✅ Encontrado cantidad específica: ${match.trim()}`);
-                });
-            }
-        }
-    });
+    // Buscar números de orden
+    const orderMatches = text.match(/CPOV-\d+/gi);
+    if (orderMatches) {
+        orderMatches.forEach(match => {
+            results.push({ nombre: 'Número de orden', valor: match.trim() });
+        });
+    }
     
-    console.log(`📊 Total de campos encontrados manualmente: ${results.length}`);
+    // Buscar IDs de carga
+    const loadMatches = text.match(/CG-\d+/gi);
+    if (loadMatches) {
+        loadMatches.forEach(match => {
+            results.push({ nombre: 'ID de carga', valor: match.trim() });
+        });
+    }
+    
+    // Buscar códigos de artículo
+    const articleMatches = text.match(/\d{3}-\d{4}|P\d{4}|\d{6}-\d{3}/gi);
+    if (articleMatches) {
+        articleMatches.forEach(match => {
+            results.push({ nombre: 'Código de artículo', valor: match.trim() });
+        });
+    }
+    
+    // Buscar cantidades
+    const quantityMatches = text.match(/\d+\s+UND/gi);
+    if (quantityMatches) {
+        quantityMatches.forEach(match => {
+            results.push({ nombre: 'Cantidad', valor: match.trim() });
+        });
+    }
+    
+    console.log(`📊 Extracción manual: ${results.length} campos`);
     return results;
 }
 
-// Función para generar Excel (LÓGICA SIMPLE COMO LOCAL)
+// Función para generar Excel simplificada
 function generateExcel(structuredData) {
-    console.log('📊 Generando Excel con lógica LOCAL...');
-    console.log('📊 Datos estructurados recibidos:', structuredData.length, 'campos');
+    console.log('📊 Generando Excel...');
     
     const workbook = XLSX.utils.book_new();
     const allData = [];
 
-    // Crear encabezados
+    // Encabezados
     const headers = ['ID de carga', 'Número de orden', 'Código de artículo', 'Cantidad'];
     allData.push(headers);
 
-    // Agrupar datos por categoría (LÓGICA SIMPLE)
+    // Agrupar datos
     const groupedData = {};
     structuredData.forEach(item => {
         const category = item.label;
@@ -312,99 +138,59 @@ function generateExcel(structuredData) {
         groupedData[category].push(item.value);
     });
 
-    console.log('📊 Datos agrupados:', groupedData);
-
-    // Obtener datos agrupados
+    // Crear registros
     const loadIds = groupedData['ID de carga'] || [];
     const orderNumbers = groupedData['Número de orden'] || [];
     const articleCodes = groupedData['Código de artículo'] || [];
     const quantities = groupedData['Cantidad'] || [];
 
-    console.log('📊 Datos extraídos:');
-    console.log('- ID de carga:', loadIds);
-    console.log('- Números de orden:', orderNumbers);
-    console.log('- Códigos de artículo:', articleCodes);
-    console.log('- Cantidades:', quantities);
-
-    // Crear registros usando lógica simple (como local)
-    const records = [];
-    
-    // Método simple: crear registros secuencialmente
     const maxLength = Math.max(orderNumbers.length, articleCodes.length, quantities.length);
     
     for (let i = 0; i < maxLength; i++) {
-        const record = {
-            loadId: loadIds[0] || '', // Usar el primer ID de carga
-            orderNumber: orderNumbers[i] || '',
-            articleCode: articleCodes[i] || '',
-            quantity: quantities[i] ? quantities[i].replace(/\s+UND.*/, '') : ''
-        };
-        
-        records.push(record);
-        console.log(`📝 Registro ${i + 1}: ${record.orderNumber} | ${record.articleCode} | ${record.quantity}`);
-    }
-
-    console.log('📊 Total de registros creados:', records.length);
-
-    // Crear filas de datos
-    records.forEach(record => {
         const row = [
-            record.loadId,
-            record.orderNumber,
-            record.articleCode,
-            record.quantity
+            loadIds[0] || '',
+            orderNumbers[i] || '',
+            articleCodes[i] || '',
+            quantities[i] ? quantities[i].replace(/\s+UND.*/, '') : ''
         ];
         allData.push(row);
-    });
+    }
 
-    console.log('📊 Tabla final:', allData.length, 'filas generadas');
-
-    const mainWorksheet = XLSX.utils.aoa_to_sheet(allData);
-
-    // Aplicar estilos básicos
-    mainWorksheet['!cols'] = [
-        { width: 20 },  // ID de carga
-        { width: 25 },  // Número de orden
-        { width: 20 },  // Código de artículo
-        { width: 15 }   // Cantidad
-    ];
-
-    XLSX.utils.book_append_sheet(workbook, mainWorksheet, 'Datos Extraídos');
+    const worksheet = XLSX.utils.aoa_to_sheet(allData);
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Datos Extraídos');
 
     return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
 }
 
-// Exportar la función para Vercel
+// Función principal para Vercel
 module.exports = async (req, res) => {
-    // Configurar CORS para Vercel
+    console.log('🚀 API iniciada - Método:', req.method);
+    
+    // CORS
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-    // Manejar preflight requests
     if (req.method === 'OPTIONS') {
         res.status(200).end();
         return;
     }
 
-    try {
-        console.log('🚀 API de extracción iniciada en Vercel...');
-        
-        // Verificar que sea una petición POST
-        if (req.method !== 'POST') {
-            return res.status(405).json({
-                success: false,
-                error: 'Método no permitido. Solo se aceptan peticiones POST.'
-            });
-        }
+    if (req.method !== 'POST') {
+        return res.status(405).json({
+            success: false,
+            error: 'Método no permitido'
+        });
+    }
 
-        // Procesar el archivo con multer
+    try {
+        // Procesar archivo
         upload.single('file')(req, res, async (err) => {
             if (err) {
-                console.error('❌ Error en multer:', err);
+                console.error('❌ Error multer:', err);
                 return res.status(400).json({
                     success: false,
-                    error: 'Error procesando el archivo: ' + err.message
+                    error: 'Error procesando archivo'
                 });
             }
 
@@ -412,136 +198,65 @@ module.exports = async (req, res) => {
                 if (!req.file) {
                     return res.status(400).json({
                         success: false,
-                        error: 'No se subió ningún archivo'
+                        error: 'No se subió archivo'
                     });
                 }
 
-                console.log('📁 Archivo recibido:', req.file.originalname, '(', req.file.size, 'bytes)');
+                console.log('📁 Archivo recibido:', req.file.originalname, req.file.size, 'bytes');
 
-                // Obtener campos solicitados
-                const fields = req.body.fields ? JSON.parse(req.body.fields) : [];
-                const requestedFields = fields.length > 0 ? fields : ['Número de orden', 'ID de carga', 'Código de artículo', 'Cantidad'];
-
-                console.log('🤖 Iniciando extracción con IA para campos:', requestedFields);
-
-                // Extraer texto del archivo
+                // Extraer texto
                 let extractedText = '';
                 
                 if (req.file.mimetype === 'application/pdf') {
-                    console.log('📄 Procesando archivo PDF...');
                     try {
                         const pdfParse = require('pdf-parse');
                         const pdfData = await pdfParse(req.file.buffer);
                         extractedText = pdfData.text;
-                        console.log(`✅ PDF procesado: ${extractedText.length} caracteres`);
+                        console.log('✅ PDF procesado:', extractedText.length, 'caracteres');
                     } catch (pdfError) {
-                        console.error('❌ Error procesando PDF:', pdfError.message);
+                        console.error('❌ Error PDF:', pdfError.message);
                         return res.status(500).json({
                             success: false,
-                            error: 'Error procesando archivo PDF'
+                            error: 'Error procesando PDF'
                         });
                     }
-                } else if (req.file.mimetype.includes('text/') || req.file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-                    console.log('📄 Procesando archivo de texto...');
-                    extractedText = req.file.buffer.toString('utf8');
                 } else {
-                    console.log('📄 Procesando archivo Excel...');
-                    try {
-                        const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
-                        const sheetNames = workbook.SheetNames;
-                        const allData = [];
-                        
-                        sheetNames.forEach(sheetName => {
-                            const worksheet = workbook.Sheets[sheetName];
-                            const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-                            allData.push(...jsonData);
-                        });
-                        
-                        extractedText = allData.map(row => row.join(' ')).join('\n');
-                    } catch (excelError) {
-                        console.error('❌ Error procesando Excel:', excelError.message);
-                        return res.status(500).json({
-                            success: false,
-                            error: 'Error procesando archivo Excel'
-                        });
-                    }
+                    extractedText = req.file.buffer.toString('utf8');
                 }
-                
-                console.log('📄 Texto extraído (primeros 500 chars):', extractedText.substring(0, 500));
-                console.log('📄 Longitud total del texto:', extractedText.length);
 
-                // Extraer datos con IA
-                console.log('🔍 Iniciando extracción con IA mejorada...');
+                // Campos solicitados
+                const fields = req.body.fields ? JSON.parse(req.body.fields) : [];
+                const requestedFields = fields.length > 0 ? fields : ['Número de orden', 'ID de carga', 'Código de artículo', 'Cantidad'];
+
+                // Extraer datos
                 const extractedData = await extractWithAI(extractedText, requestedFields);
-                console.log('📊 Datos extraídos con IA:', extractedData.length, 'campos');
-
+                
                 if (extractedData.length === 0) {
-                    console.error('❌ No se pudieron extraer datos del archivo');
                     return res.status(500).json({
                         success: false,
-                        error: 'No se pudieron extraer datos del archivo'
+                        error: 'No se pudieron extraer datos'
                     });
                 }
 
-                // Log de los primeros datos para debugging
-                console.log('📋 Primeros 3 datos extraídos:', extractedData.slice(0, 3));
-                
-                // Log detallado de todos los datos extraídos
-                console.log('📊 Todos los datos extraídos:');
-                extractedData.forEach((item, index) => {
-                    console.log(`${index + 1}. ${item.nombre || item.label}: "${item.valor || item.value}"`);
-                });
+                // Formatear datos
+                const structuredData = extractedData.map(item => ({
+                    label: item.nombre,
+                    value: item.valor
+                }));
 
-                // USAR EXACTAMENTE LA MISMA LÓGICA QUE LOCAL
-                console.log('🔄 Formateando resultados usando lógica LOCAL...');
-                
-                // Formatear resultados y eliminar duplicados de números de orden (LÓGICA LOCAL)
-                const structuredData = [];
-                const seenOrderNumbers = new Set();
-                
-                extractedData.forEach(field => {
-                    const isOrderNumber = field.nombre.toLowerCase().includes('número de orden') || 
-                                         field.nombre.toLowerCase().includes('numero de orden') ||
-                                         field.nombre.toLowerCase().includes('order number');
-                    
-                    if (isOrderNumber) {
-                        // Para números de orden, verificar duplicados
-                        if (!seenOrderNumbers.has(field.valor)) {
-                            seenOrderNumbers.add(field.valor);
-                            structuredData.push({
-                                label: field.nombre,
-                                value: field.valor
-                            });
-                        }
-                    } else {
-                        // Para otras categorías, agregar normalmente
-                        structuredData.push({
-                            label: field.nombre,
-                            value: field.valor
-                        });
-                    }
-                });
-                
-                console.log('📊 Datos estructurados (lógica LOCAL):', structuredData.length, 'campos');
-                structuredData.forEach((item, index) => {
-                    console.log(`${index + 1}. ${item.label}: "${item.value}"`);
-                });
-
-                // Generar Excel usando la lógica LOCAL
-                console.log('📊 Generando archivo Excel...');
+                // Generar Excel
                 const excelBuffer = generateExcel(structuredData);
 
                 // Enviar respuesta
-                console.log('📤 Enviando archivo Excel...');
                 res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
                 res.setHeader('Content-Disposition', 'attachment; filename="datos_extraidos.xlsx"');
                 res.send(excelBuffer);
 
             } catch (error) {
-                console.error('❌ Error en la API:', error);
+                console.error('❌ Error interno:', error);
                 res.status(500).json({
                     success: false,
-                    error: error.message || 'Error interno del servidor'
+                    error: 'Error interno del servidor'
                 });
             }
         });
@@ -550,7 +265,7 @@ module.exports = async (req, res) => {
         console.error('❌ Error general:', error);
         res.status(500).json({
             success: false,
-            error: error.message || 'Error interno del servidor'
+            error: 'Error interno del servidor'
         });
     }
 };
