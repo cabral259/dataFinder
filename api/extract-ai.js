@@ -163,12 +163,31 @@ function extractFieldsManually(text, requestedFields) {
             
             // Para cada orden encontrada, buscar sus códigos de artículo asociados
             const orderNumbers = Array.from(seenOrderNumbers);
+            console.log('🔍 Buscando códigos de artículo para órdenes:', orderNumbers);
+            
             orderNumbers.forEach(orderNumber => {
-                // Buscar códigos de artículo asociados a esta orden (formato: 101643-250)
+                // Buscar códigos de artículo asociados a esta orden (múltiples formatos)
                 const orderSection = text.split(orderNumber)[1] || text;
-                const articleCodeMatches = orderSection.match(/\d{6}-\d{3}/gi);
+                console.log(`🔍 Sección después de ${orderNumber} (primeros 200 chars):`, orderSection.substring(0, 200));
                 
-                if (articleCodeMatches) {
+                // Patrones para diferentes formatos de códigos de artículo
+                const articleCodePatterns = [
+                    /\d{3}-\d{4}/gi,  // 320-0400, 326-0075
+                    /P\d{4}/gi,       // P1106
+                    /\d{6}-\d{3}/gi   // 101643-250 (formato original)
+                ];
+                
+                let articleCodeMatches = [];
+                articleCodePatterns.forEach(pattern => {
+                    const matches = orderSection.match(pattern);
+                    if (matches) {
+                        articleCodeMatches = articleCodeMatches.concat(matches);
+                    }
+                });
+                
+                console.log(`🔍 Códigos encontrados para ${orderNumber}:`, articleCodeMatches);
+                
+                if (articleCodeMatches.length > 0) {
                     articleCodeMatches.forEach(articleCode => {
                         const cleanArticleCode = articleCode.trim();
                         if (cleanArticleCode.length > 8) { // Filtrar códigos válidos (formato: 101643-250)
@@ -176,6 +195,8 @@ function extractFieldsManually(text, requestedFields) {
                             console.log(`✅ Encontrado código de artículo: ${cleanArticleCode}`);
                         }
                     });
+                } else {
+                    console.log(`⚠️ No se encontraron códigos de artículo para orden: ${orderNumber}`);
                 }
             });
         }
@@ -217,9 +238,11 @@ function extractFieldsManually(text, requestedFields) {
         }
         
         if (fieldLower.includes('código artículo') || fieldLower.includes('codigo articulo') || fieldLower.includes('article code')) {
-            // Buscar códigos de artículo (formato: 101643-250)
+            // Buscar códigos de artículo (múltiples formatos)
             const articleCodePatterns = [
-                /\d{6}-\d{3}/gi,
+                /\d{3}-\d{4}/gi,  // 320-0400, 326-0075
+                /P\d{4}/gi,       // P1106
+                /\d{6}-\d{3}/gi,  // 101643-250 (formato original)
                 /(?:Código de artículo|Article Code):\s*([A-Z0-9\-]+)/gi
             ];
             
@@ -351,13 +374,12 @@ function generateExcel(structuredData) {
     return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
 }
 
-// Función principal de la API para Vercel
+// Exportar la función para Vercel
 module.exports = async (req, res) => {
-    // Configurar CORS más permisivo
+    // Configurar CORS para Vercel
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    res.setHeader('Access-Control-Max-Age', '86400');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
     // Manejar preflight requests
     if (req.method === 'OPTIONS') {
@@ -365,83 +387,51 @@ module.exports = async (req, res) => {
         return;
     }
 
-    if (req.method !== 'POST') {
-        return res.status(405).json({ error: 'Method not allowed' });
-    }
-
-    // Agregar headers adicionales para mejor compatibilidad
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
-    res.setHeader('X-Vercel-Cache-Bypass', 'true');
-    res.setHeader('X-Deploy-Timestamp', Date.now().toString());
-
     try {
-        // Verificar API key con mejor manejo de errores
-        if (!process.env.GEMINI_API_KEY) {
-            console.error('❌ API Key de Gemini no configurada en variables de entorno');
-            return res.status(500).json({
+        console.log('🚀 API de extracción iniciada en Vercel...');
+        
+        // Verificar que sea una petición POST
+        if (req.method !== 'POST') {
+            return res.status(405).json({
                 success: false,
-                error: 'Error de configuración del servidor. Contacta al administrador.'
+                error: 'Método no permitido. Solo se aceptan peticiones POST.'
             });
         }
 
-        // Verificar que la API key sea válida
-        if (process.env.GEMINI_API_KEY === 'tu_api_key_de_gemini_aqui') {
-            console.error('❌ API Key de Gemini no ha sido configurada correctamente');
-            return res.status(500).json({
-                success: false,
-                error: 'Error de configuración del servidor. Contacta al administrador.'
-            });
-        }
-
-        // Procesar archivos usando multer
-        upload.array('files')(req, res, async (err) => {
+        // Procesar el archivo con multer
+        upload.single('file')(req, res, async (err) => {
             if (err) {
                 console.error('❌ Error en multer:', err);
                 return res.status(400).json({
                     success: false,
-                    error: 'Error procesando archivos'
+                    error: 'Error procesando el archivo: ' + err.message
                 });
             }
 
             try {
-                console.log('📥 Petición recibida:', {
-                    method: req.method,
-                    headers: req.headers,
-                    bodyKeys: Object.keys(req.body || {}),
-                    filesCount: req.files ? req.files.length : 0
-                });
-
-                const files = req.files || [];
-                if (files.length === 0) {
-                    console.error('❌ No se subieron archivos');
+                if (!req.file) {
                     return res.status(400).json({
                         success: false,
-                        error: 'No se subieron archivos'
+                        error: 'No se subió ningún archivo'
                     });
                 }
 
-                const requestedFields = req.body.fields ? JSON.parse(req.body.fields) : [];
-                
-                if (requestedFields.length === 0) {
-                    return res.status(400).json({
-                        success: false,
-                        error: 'No se especificaron campos para extraer'
-                    });
-                }
+                console.log('📁 Archivo recibido:', req.file.originalname, '(', req.file.size, 'bytes)');
+
+                // Obtener campos solicitados
+                const fields = req.body.fields ? JSON.parse(req.body.fields) : [];
+                const requestedFields = fields.length > 0 ? fields : ['Número de orden', 'ID de carga', 'Código de artículo', 'Cantidad'];
 
                 console.log('🤖 Iniciando extracción con IA para campos:', requestedFields);
 
-                        // Extraer texto del archivo
-        const file = files[0];
-        let extractedText = '';
-        
-        if (file.mimetype === 'application/pdf') {
+                // Extraer texto del archivo
+                let extractedText = '';
+                
+                if (req.file.mimetype === 'application/pdf') {
                     console.log('📄 Procesando archivo PDF...');
                     try {
                         const pdfParse = require('pdf-parse');
-                        const pdfData = await pdfParse(file.buffer);
+                        const pdfData = await pdfParse(req.file.buffer);
                         extractedText = pdfData.text;
                         console.log(`✅ PDF procesado: ${extractedText.length} caracteres`);
                     } catch (pdfError) {
@@ -451,13 +441,13 @@ module.exports = async (req, res) => {
                             error: 'Error procesando archivo PDF'
                         });
                     }
-                } else if (file.mimetype.includes('text/') || file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+                } else if (req.file.mimetype.includes('text/') || req.file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
                     console.log('📄 Procesando archivo de texto...');
-                    extractedText = file.buffer.toString('utf8');
+                    extractedText = req.file.buffer.toString('utf8');
                 } else {
                     console.log('📄 Procesando archivo Excel...');
                     try {
-                        const workbook = XLSX.read(file.buffer, { type: 'buffer' });
+                        const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
                         const sheetNames = workbook.SheetNames;
                         const allData = [];
                         
@@ -478,101 +468,68 @@ module.exports = async (req, res) => {
                 }
                 
                 console.log('📄 Texto extraído (primeros 500 chars):', extractedText.substring(0, 500));
-                console.log('�� Longitud total del texto:', extractedText.length);
+                console.log('📄 Longitud total del texto:', extractedText.length);
 
-                // Extraer datos con IA mejorada
-        console.log('🔍 Iniciando extracción con IA mejorada...');
-        const extractedData = await extractWithAI(extractedText, requestedFields);
-        console.log('📊 Datos extraídos con IA:', extractedData.length, 'campos');
+                // Extraer datos con IA
+                console.log('🔍 Iniciando extracción con IA mejorada...');
+                const extractedData = await extractWithAI(extractedText, requestedFields);
+                console.log('📊 Datos extraídos con IA:', extractedData.length, 'campos');
 
-        // LOGGING ESPECÍFICO PARA CANTIDADES
-        console.log('🔍 ANÁLISIS ESPECÍFICO DE CANTIDADES:');
-        const cantidades = extractedData.filter(item => 
-            item.nombre && item.nombre.toLowerCase().includes('cantidad')
-        );
-        console.log('📊 Cantidades encontradas:', cantidades.length);
-        cantidades.forEach((cantidad, index) => {
-            console.log(`📊 Cantidad ${index + 1}: "${cantidad.valor}" (campo: "${cantidad.nombre}")`);
-        });
-
-        // Buscar cantidades en el texto original
-        console.log('🔍 BUSCANDO CANTIDADES EN EL TEXTO ORIGINAL:');
-        const quantityPatterns = [
-            /\b(\d{1,4})\s*UND\b/gi,
-            /\b(\d{1,4})\s*UNIDADES\b/gi,
-            /\b(\d{1,4})\s+PCS\b/gi
-        ];
-        
-        quantityPatterns.forEach((pattern, index) => {
-            const matches = extractedText.match(pattern);
-            console.log(`🔍 Patrón ${index + 1} (${pattern}):`, matches);
-        });
-
-        // Buscar números específicos mencionados en el documento
-        console.log('🔍 BUSCANDO NÚMEROS ESPECÍFICOS:');
-        const specificNumbers = ['18', '400', '160', '150', '3', '15', '40', '200'];
-        specificNumbers.forEach(num => {
-            const count = (extractedText.match(new RegExp(num, 'g')) || []).length;
-            if (count > 0) {
-                console.log(`🔍 Número "${num}" encontrado ${count} veces en el texto`);
-            }
-        });
-
-        if (extractedData.length === 0) {
-            console.error('❌ No se pudieron extraer datos del archivo');
-            return res.status(500).json({
-                success: false,
-                error: 'No se pudieron extraer datos del archivo'
-            });
-        }
-
-        // Log de los primeros datos para debugging
-        console.log('📋 Primeros 3 datos extraídos:', extractedData.slice(0, 3));
-        
-        // Log detallado de todos los datos extraídos
-        console.log('📊 Todos los datos extraídos:');
-        extractedData.forEach((item, index) => {
-            console.log(`${index + 1}. ${item.nombre || item.label}: "${item.valor || item.value}"`);
-        });
-
-        // USAR EXACTAMENTE LA MISMA LÓGICA QUE LOCAL
-        console.log('🔄 Formateando resultados usando lógica LOCAL...');
-        
-        // Formatear resultados y eliminar duplicados de números de orden (LÓGICA LOCAL)
-        const structuredData = [];
-        const seenOrderNumbers = new Set();
-        
-        extractedData.forEach(field => {
-            const isOrderNumber = field.nombre.toLowerCase().includes('número de orden') || 
-                                 field.nombre.toLowerCase().includes('numero de orden') ||
-                                 field.nombre.toLowerCase().includes('order number');
-            
-            if (isOrderNumber) {
-                // Para números de orden, verificar duplicados
-                if (!seenOrderNumbers.has(field.valor)) {
-                    seenOrderNumbers.add(field.valor);
-                    structuredData.push({
-                        label: field.nombre,
-                        value: field.valor
+                if (extractedData.length === 0) {
+                    console.error('❌ No se pudieron extraer datos del archivo');
+                    return res.status(500).json({
+                        success: false,
+                        error: 'No se pudieron extraer datos del archivo'
                     });
                 }
-            } else {
-                // Para otras categorías, agregar normalmente
-                structuredData.push({
-                    label: field.nombre,
-                    value: field.valor
-                });
-            }
-        });
-        
-        console.log('📊 Datos estructurados (lógica LOCAL):', structuredData.length, 'campos');
-        structuredData.forEach((item, index) => {
-            console.log(`${index + 1}. ${item.label}: "${item.value}"`);
-        });
 
-        // Generar Excel usando la lógica LOCAL
-        console.log('📊 Generando archivo Excel...');
-        const excelBuffer = generateExcel(structuredData);
+                // Log de los primeros datos para debugging
+                console.log('📋 Primeros 3 datos extraídos:', extractedData.slice(0, 3));
+                
+                // Log detallado de todos los datos extraídos
+                console.log('📊 Todos los datos extraídos:');
+                extractedData.forEach((item, index) => {
+                    console.log(`${index + 1}. ${item.nombre || item.label}: "${item.valor || item.value}"`);
+                });
+
+                // USAR EXACTAMENTE LA MISMA LÓGICA QUE LOCAL
+                console.log('🔄 Formateando resultados usando lógica LOCAL...');
+                
+                // Formatear resultados y eliminar duplicados de números de orden (LÓGICA LOCAL)
+                const structuredData = [];
+                const seenOrderNumbers = new Set();
+                
+                extractedData.forEach(field => {
+                    const isOrderNumber = field.nombre.toLowerCase().includes('número de orden') || 
+                                         field.nombre.toLowerCase().includes('numero de orden') ||
+                                         field.nombre.toLowerCase().includes('order number');
+                    
+                    if (isOrderNumber) {
+                        // Para números de orden, verificar duplicados
+                        if (!seenOrderNumbers.has(field.valor)) {
+                            seenOrderNumbers.add(field.valor);
+                            structuredData.push({
+                                label: field.nombre,
+                                value: field.valor
+                            });
+                        }
+                    } else {
+                        // Para otras categorías, agregar normalmente
+                        structuredData.push({
+                            label: field.nombre,
+                            value: field.valor
+                        });
+                    }
+                });
+                
+                console.log('📊 Datos estructurados (lógica LOCAL):', structuredData.length, 'campos');
+                structuredData.forEach((item, index) => {
+                    console.log(`${index + 1}. ${item.label}: "${item.value}"`);
+                });
+
+                // Generar Excel usando la lógica LOCAL
+                console.log('📊 Generando archivo Excel...');
+                const excelBuffer = generateExcel(structuredData);
 
                 // Enviar respuesta
                 console.log('📤 Enviando archivo Excel...');
