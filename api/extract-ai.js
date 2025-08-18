@@ -840,6 +840,39 @@ module.exports = async (req, res) => {
         const extractedData = await extractWithAI(extractedText, requestedFields);
         console.log('📊 Datos extraídos con IA:', extractedData.length, 'campos');
 
+        // LOGGING ESPECÍFICO PARA CANTIDADES
+        console.log('🔍 ANÁLISIS ESPECÍFICO DE CANTIDADES:');
+        const cantidades = extractedData.filter(item => 
+            item.nombre && item.nombre.toLowerCase().includes('cantidad')
+        );
+        console.log('📊 Cantidades encontradas:', cantidades.length);
+        cantidades.forEach((cantidad, index) => {
+            console.log(`📊 Cantidad ${index + 1}: "${cantidad.valor}" (campo: "${cantidad.nombre}")`);
+        });
+
+        // Buscar cantidades en el texto original
+        console.log('🔍 BUSCANDO CANTIDADES EN EL TEXTO ORIGINAL:');
+        const quantityPatterns = [
+            /\b(\d{1,4})\s*UND\b/gi,
+            /\b(\d{1,4})\s*UNIDADES\b/gi,
+            /\b(\d{1,4})\s+PCS\b/gi
+        ];
+        
+        quantityPatterns.forEach((pattern, index) => {
+            const matches = extractedText.match(pattern);
+            console.log(`🔍 Patrón ${index + 1} (${pattern}):`, matches);
+        });
+
+        // Buscar números específicos mencionados en el documento
+        console.log('🔍 BUSCANDO NÚMEROS ESPECÍFICOS:');
+        const specificNumbers = ['18', '400', '160', '150', '3', '15', '40', '200'];
+        specificNumbers.forEach(num => {
+            const count = (extractedText.match(new RegExp(num, 'g')) || []).length;
+            if (count > 0) {
+                console.log(`🔍 Número "${num}" encontrado ${count} veces en el texto`);
+            }
+        });
+
                 if (extractedData.length === 0) {
                     console.error('❌ No se pudieron extraer datos del archivo');
                     return res.status(500).json({
