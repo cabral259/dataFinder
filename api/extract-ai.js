@@ -513,90 +513,83 @@ function generateExcel(structuredData) {
     // Crear registros usando método mejorado
     const records = [];
     
-    // Método 1: Procesar datos secuencialmente para mantener relaciones
+    // Método 1: Procesar datos secuencialmente para mantener relaciones exactas
     if (structuredData && structuredData.length > 0) {
-        console.log('🔄 Usando método secuencial mejorado para crear registros...');
+        console.log('🔄 Usando método secuencial para mantener relaciones exactas...');
         
-        // Crear un mapa para mantener las relaciones
-        const orderArticleMap = new Map();
+        // Crear un mapa para mantener las relaciones orden-artículo-cantidad
+        const orderArticleQuantityMap = new Map();
         let currentOrder = '';
         let currentArticle = '';
+        let currentQuantities = [];
         
-        // Primera pasada: identificar relaciones orden-artículo
+        // Primera pasada: identificar relaciones orden-artículo-cantidad
         for (let i = 0; i < structuredData.length; i++) {
             const item = structuredData[i];
             const label = item.label || item.nombre || '';
             const value = item.value || item.valor || '';
             
             if (label.toLowerCase().includes('número de orden') || label.toLowerCase().includes('numero de orden') || label.toLowerCase().includes('order number')) {
+                // Si tenemos datos acumulados, guardar la relación
+                if (currentOrder && currentArticle) {
+                    const key = `${currentOrder}|${currentArticle}`;
+                    orderArticleQuantityMap.set(key, currentQuantities);
+                    console.log(`📋 Relación guardada: ${currentOrder} | ${currentArticle} | Cantidades: [${currentQuantities.join(', ')}]`);
+                }
+                
+                // Iniciar nuevo registro
                 currentOrder = value;
-                console.log(`📋 Encontrado orden: ${currentOrder}`);
+                currentArticle = '';
+                currentQuantities = [];
+                console.log(`📋 Nuevo orden: ${currentOrder}`);
+                
             } else if (label.toLowerCase().includes('nombre de artículo') || label.toLowerCase().includes('nombre de articulo') || label.toLowerCase().includes('article name')) {
                 currentArticle = value;
-                console.log(`📋 Encontrado artículo: ${currentArticle}`);
+                console.log(`📋 Artículo: ${currentArticle}`);
                 
-                // Guardar la relación orden-artículo
-                if (currentOrder && currentArticle) {
-                    orderArticleMap.set(currentOrder, currentArticle);
-                    console.log(`📋 Relación guardada: ${currentOrder} → ${currentArticle}`);
-                }
+            } else if (label.toLowerCase().includes('cantidad')) {
+                currentQuantities.push(value);
+                console.log(`📋 Cantidad agregada: ${value} para orden: ${currentOrder}`);
             }
         }
         
-        console.log('📋 Mapa de relaciones orden-artículo:', orderArticleMap);
+        // Guardar el último registro
+        if (currentOrder && currentArticle) {
+            const key = `${currentOrder}|${currentArticle}`;
+            orderArticleQuantityMap.set(key, currentQuantities);
+            console.log(`📋 Última relación guardada: ${currentOrder} | ${currentArticle} | Cantidades: [${currentQuantities.join(', ')}]`);
+        }
         
-        // Segunda pasada: asignar cantidades a las relaciones correctas
-        let quantityIndex = 0;
-        const processedOrders = new Set();
+        console.log('📋 Mapa completo de relaciones:', orderArticleQuantityMap);
         
-        for (const order of uniqueOrders) {
-            const article = orderArticleMap.get(order);
+        // Segunda pasada: crear registros con las relaciones exactas
+        for (const [key, quantities] of orderArticleQuantityMap) {
+            const [order, article] = key.split('|');
             
-            if (article) {
-                // Buscar cantidades que correspondan a este orden
-                // Por ahora, asignar cantidades secuencialmente
-                const orderQuantities = [];
-                
-                // Asignar al menos una cantidad por orden
-                if (quantityIndex < quantities.length) {
-                    orderQuantities.push(quantities[quantityIndex]);
-                    quantityIndex++;
-                }
-                
-                // Si hay más cantidades y este orden aparece múltiples veces, asignar más
-                const orderCount = orderNumbers.filter(o => o === order).length;
-                for (let i = 1; i < orderCount && quantityIndex < quantities.length; i++) {
-                    orderQuantities.push(quantities[quantityIndex]);
-                    quantityIndex++;
-                }
-                
-                // Crear registros para este orden
-                if (orderQuantities.length > 0) {
-                    for (const quantity of orderQuantities) {
-                        records.push({
-                            loadId: loadId,
-                            orderNumber: order,
-                            articleName: article,
-                            quantity: quantity
-                        });
-                        console.log(`📝 Registro creado: ${order} | ${article} | ${quantity}`);
-                    }
-                } else {
-                    // Si no hay cantidades, crear registro vacío
+            if (quantities.length > 0) {
+                // Crear un registro por cada cantidad
+                for (const quantity of quantities) {
                     records.push({
                         loadId: loadId,
                         orderNumber: order,
                         articleName: article,
-                        quantity: ''
+                        quantity: quantity
                     });
-                    console.log(`📝 Registro vacío creado: ${order} | ${article} | (sin cantidad)`);
+                    console.log(`📝 Registro creado: ${order} | ${article} | ${quantity}`);
                 }
-                
-                processedOrders.add(order);
+            } else {
+                // Si no hay cantidades, crear registro vacío
+                records.push({
+                    loadId: loadId,
+                    orderNumber: order,
+                    articleName: article,
+                    quantity: ''
+                });
+                console.log(`📝 Registro vacío creado: ${order} | ${article} | (sin cantidad)`);
             }
         }
         
-        // Si no se procesaron todos los órdenes, usar método de fallback
+        // Si no se crearon registros, usar método de fallback
         if (records.length === 0) {
             console.log('🔄 Usando método de fallback para crear registros...');
             
