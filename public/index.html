@@ -736,7 +736,19 @@
 
         // Manejar selección de archivos
         fileInput.addEventListener('change', (e) => {
+            console.log('📂 Archivos seleccionados:', e.target.files);
             selectedFiles = Array.from(e.target.files);
+            
+            // Logging detallado de cada archivo
+            selectedFiles.forEach((file, index) => {
+                console.log(`📄 Archivo ${index + 1}:`, {
+                    nombre: file.name,
+                    tamaño: file.size,
+                    tipo: file.type,
+                    últimaModificación: file.lastModified
+                });
+            });
+            
             updateFileList();
             updateExtractButton();
         });
@@ -754,7 +766,15 @@
         function updateFileList() {
             fileList.innerHTML = '';
             
+            console.log('🔄 Actualizando lista de archivos. Total:', selectedFiles.length);
+            
             selectedFiles.forEach((file, index) => {
+                console.log(`📋 Archivo ${index + 1} en lista:`, {
+                    nombre: file.name,
+                    tamaño: file.size,
+                    tipo: file.type
+                });
+                
                 const fileItem = document.createElement('div');
                 fileItem.className = 'file-item';
                 
