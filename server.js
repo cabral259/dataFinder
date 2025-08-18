@@ -842,6 +842,10 @@ async function generateExcel(fileName, structuredData, fullText) {
             // Método 2: Procesar secuencialmente manteniendo cada código de artículo como registro separado
             if (structuredData && structuredData.length > 0) {
                 console.log('🔄 Usando método secuencial para mantener cada código de artículo...');
+                console.log('📊 Datos estructurados recibidos de Gemini:');
+                structuredData.forEach((item, index) => {
+                    console.log(`${index + 1}. ${item.label || item.nombre}: "${item.value || item.valor}"`);
+                });
                 
                 let currentOrder = '';
                 let currentArticleCode = '';
