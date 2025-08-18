@@ -236,68 +236,69 @@ function extractFieldsManually(text, requestedFields) {
             
             // Procesar cada línea individualmente para cantidades
             lines.forEach((line, lineIndex) => {
-                // Solo procesar líneas que contengan "TUBOS PVC" para asegurar contexto correcto
-                if (line.includes('TUBOS PVC') || line.includes('UND') || line.includes('UNIDADES')) {
-                    console.log(`📄 Procesando línea ${lineIndex + 1}: "${line}"`);
-                    
-                    // Patrón más específico para cantidades: \b(\d{1,4})\s*UND\b
-                    const quantityPattern = /\b(\d{1,4})\s*UND\b/gi;
-                    const matches = line.match(quantityPattern);
-                    
-                    if (matches) {
-                        matches.forEach(match => {
-                            // Extraer solo el número
-                            const numberMatch = match.match(/(\d{1,4})/);
-                            if (numberMatch) {
-                                const quantity = numberMatch[1];
-                                const numValue = parseInt(quantity);
-                                
-                                // Validación cruzada: descartar números sospechosos
-                                if (numValue > 0 && numValue <= 9999) {
-                                    // Verificar que no sea un número de orden (CPOV-)
-                                    if (!line.includes('CPOV-') || !line.match(/CPOV-\d+/)) {
-                                        results.push({ nombre: field, valor: quantity });
-                                        console.log(`✅ Cantidad válida encontrada en línea ${lineIndex + 1}: ${quantity} UND`);
-                                    } else {
-                                        console.log(`⚠️ Cantidad descartada (posible número de orden): ${quantity} en línea ${lineIndex + 1}`);
-                                    }
-                                } else {
-                                    console.log(`⚠️ Cantidad fuera de rango: ${quantity} en línea ${lineIndex + 1}`);
-                                }
-                            }
-                        });
-                    }
-                    
-                    // Buscar también cantidades sin "UND" pero con contexto de artículo
-                    const numberOnlyPattern = /\b(\d{1,4})\b/gi;
-                    const numberMatches = line.match(numberOnlyPattern);
-                    
-                    if (numberMatches && line.includes('TUBOS PVC')) {
-                        numberMatches.forEach(match => {
-                            const numValue = parseInt(match);
+                console.log(`📄 Procesando línea ${lineIndex + 1}: "${line}"`);
+                
+                // Patrón más específico para cantidades: \b(\d{1,4})\s*UND\b
+                const quantityPattern = /\b(\d{1,4})\s*UND\b/gi;
+                const matches = line.match(quantityPattern);
+                
+                if (matches) {
+                    matches.forEach(match => {
+                        // Extraer solo el número
+                        const numberMatch = match.match(/(\d{1,4})/);
+                        if (numberMatch) {
+                            const quantity = numberMatch[1];
+                            const numValue = parseInt(quantity);
                             
-                            // Validación más estricta para números sin "UND"
+                            // Validación cruzada: descartar números sospechosos
                             if (numValue > 0 && numValue <= 9999) {
-                                // Verificar que no sea parte de un número de orden
-                                const orderPattern = /CPOV-\d+/;
-                                if (!orderPattern.test(line)) {
-                                    // Verificar que esté cerca del nombre del artículo
-                                    const articleIndex = line.indexOf('TUBOS PVC');
-                                    const numberIndex = line.indexOf(match);
-                                    
-                                    // Si el número está después del artículo, es probablemente una cantidad
-                                    if (numberIndex > articleIndex) {
-                                        results.push({ nombre: field, valor: match });
-                                        console.log(`✅ Cantidad inferida en línea ${lineIndex + 1}: ${match}`);
-                                    }
+                                // Verificar que no sea un número de orden (CPOV-)
+                                if (!line.includes('CPOV-') || !line.match(/CPOV-\d+/)) {
+                                    results.push({ nombre: field, valor: quantity });
+                                    console.log(`✅ Cantidad válida encontrada en línea ${lineIndex + 1}: ${quantity} UND`);
+                                } else {
+                                    console.log(`⚠️ Cantidad descartada (posible número de orden): ${quantity} en línea ${lineIndex + 1}`);
+                                }
+                            } else {
+                                console.log(`⚠️ Cantidad fuera de rango: ${quantity} en línea ${lineIndex + 1}`);
+                            }
+                        }
+                    });
+                }
+                
+                // Buscar también cantidades sin "UND" pero con contexto de artículo
+                const numberOnlyPattern = /\b(\d{1,4})\b/gi;
+                const numberMatches = line.match(numberOnlyPattern);
+                
+                if (numberMatches && (line.includes('TUBOS PVC') || line.includes('CORVI') || line.includes('SONACA'))) {
+                    numberMatches.forEach(match => {
+                        const numValue = parseInt(match);
+                        
+                        // Validación más estricta para números sin "UND"
+                        if (numValue > 0 && numValue <= 9999) {
+                            // Verificar que no sea parte de un número de orden
+                            const orderPattern = /CPOV-\d+/;
+                            if (!orderPattern.test(line)) {
+                                // Verificar que esté cerca del nombre del artículo
+                                const articleIndex = Math.max(
+                                    line.indexOf('TUBOS PVC'),
+                                    line.indexOf('CORVI'),
+                                    line.indexOf('SONACA')
+                                );
+                                const numberIndex = line.indexOf(match);
+                                
+                                // Si el número está después del artículo, es probablemente una cantidad
+                                if (articleIndex !== -1 && numberIndex > articleIndex) {
+                                    results.push({ nombre: field, valor: match });
+                                    console.log(`✅ Cantidad inferida en línea ${lineIndex + 1}: ${match}`);
                                 }
                             }
-                        });
-                    }
+                        }
+                    });
                 }
             });
             
-            // Si no se encontraron cantidades con el método específico, usar fallback
+            // Si no se encontraron cantidades con el método específico, usar fallback más agresivo
             if (results.filter(r => r.nombre === field).length === 0) {
                 console.log('🔄 Usando método de fallback para cantidades...');
                 
@@ -325,6 +326,40 @@ function extractFieldsManually(text, requestedFields) {
                         });
                     }
                 });
+            }
+            
+            // Método final: buscar números en todo el texto que parezcan cantidades
+            if (results.filter(r => r.nombre === field).length === 0) {
+                console.log('🔄 Usando método final para cantidades...');
+                
+                // Buscar números que estén cerca de palabras clave de artículos
+                const allNumbers = text.match(/\b(\d{1,4})\b/gi);
+                if (allNumbers) {
+                    const seenNumbers = new Set();
+                    allNumbers.forEach(match => {
+                        const numValue = parseInt(match);
+                        
+                        if (numValue > 0 && numValue <= 9999 && !seenNumbers.has(match)) {
+                            // Verificar que no sea un número de orden
+                            const orderPattern = new RegExp(`CPOV-${match}`, 'i');
+                            if (!orderPattern.test(text)) {
+                                // Verificar que esté cerca de palabras clave de artículos
+                                const articleKeywords = ['TUBOS', 'PVC', 'CORVI', 'SONACA', 'SDR', 'SCH'];
+                                const hasContext = articleKeywords.some(keyword => {
+                                    const keywordIndex = text.indexOf(keyword);
+                                    const numberIndex = text.indexOf(match);
+                                    return keywordIndex !== -1 && Math.abs(keywordIndex - numberIndex) < 200;
+                                });
+                                
+                                if (hasContext) {
+                                    seenNumbers.add(match);
+                                    results.push({ nombre: field, valor: match });
+                                    console.log(`✅ Cantidad final encontrada: ${match}`);
+                                }
+                            }
+                        }
+                    });
+                }
             }
         }
     });
@@ -355,6 +390,8 @@ function generateExcel(structuredData) {
         groupedData[category].push(item.value || item.valor);
     });
 
+    console.log('📊 Datos agrupados:', groupedData);
+
     // Obtener ID de carga (siempre el primero)
     const loadIds = groupedData['ID de carga'] || [];
     const loadId = loadIds.length > 0 ? loadIds[0] : '';
@@ -369,12 +406,19 @@ function generateExcel(structuredData) {
     // Obtener todas las cantidades
     const quantities = groupedData['Cantidad'] || [];
 
-    // Crear registros combinando los datos
-    // Procesar datos para crear registros usando la lógica del servidor local
+    console.log('📊 Datos extraídos:');
+    console.log('- ID de carga:', loadId);
+    console.log('- Números de orden:', uniqueOrders);
+    console.log('- Nombres de artículos:', articleNames);
+    console.log('- Cantidades:', quantities);
+
+    // Crear registros usando método mejorado
     const records = [];
     
+    // Método 1: Procesar datos secuencialmente
     if (structuredData && structuredData.length > 0) {
-        // Procesar los datos secuencialmente para mantener las relaciones exactas
+        console.log('🔄 Usando método secuencial para crear registros...');
+        
         let currentOrder = '';
         let currentArticleName = '';
         let currentQuantities = [];
@@ -444,9 +488,11 @@ function generateExcel(structuredData) {
         }
     }
     
-    // Si no hay registros con la lógica secuencial, usar fallback
+    // Método 2: Si no hay registros con el método secuencial, usar método de combinación
     if (records.length === 0) {
-        console.log('⚠️ Usando lógica de fallback para crear registros...');
+        console.log('🔄 Usando método de combinación para crear registros...');
+        
+        // Crear combinaciones de orden + artículo + cantidad
         const seenCombinations = new Set();
         
         for (let i = 0; i < orderNumbers.length; i++) {
@@ -467,8 +513,38 @@ function generateExcel(structuredData) {
             }
         }
     }
+    
+    // Método 3: Si aún no hay registros, crear registros con cantidades disponibles
+    if (records.length === 0) {
+        console.log('🔄 Usando método final para crear registros...');
+        
+        // Asignar cantidades a artículos de manera secuencial
+        let quantityIndex = 0;
+        
+        for (let i = 0; i < orderNumbers.length; i++) {
+            const orderNumber = orderNumbers[i];
+            const articleName = articleNames[i] || '';
+            const quantity = quantities[quantityIndex] || '';
+            
+            if (articleName) {
+                records.push({
+                    loadId: loadId,
+                    orderNumber: orderNumber,
+                    articleName: articleName,
+                    quantity: quantity
+                });
+                
+                if (quantity) {
+                    quantityIndex++;
+                }
+            }
+        }
+    }
 
-    console.log('📊 Registros agrupados:', records.length, 'registros creados');
+    console.log('📊 Registros creados:', records.length);
+    records.forEach((record, index) => {
+        console.log(`${index + 1}. ${record.orderNumber} | ${record.articleName} | ${record.quantity}`);
+    });
 
     // Crear filas de datos
     records.forEach(record => {
