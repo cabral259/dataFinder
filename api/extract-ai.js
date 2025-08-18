@@ -27,20 +27,35 @@ async function extractPDFWithPdfJS(buffer) {
         
         let fullText = '';
         
+        console.log(`📄 PDF cargado: ${pdf.numPages} páginas`);
+        
         // Extraer texto de cada página
         for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+            console.log(`📄 Procesando página ${pageNum}/${pdf.numPages}`);
+            
             const page = await pdf.getPage(pageNum);
             const textContent = await page.getTextContent();
             
-            // Construir texto manteniendo la estructura
-            const pageText = textContent.items
-                .map(item => item.str)
-                .join(' ');
+            // Construir texto manteniendo la estructura original
+            let pageText = '';
+            let lastY = null;
             
-            fullText += pageText + '\n';
+            textContent.items.forEach(item => {
+                // Agregar salto de línea si hay cambio significativo en Y
+                if (lastY !== null && Math.abs(item.transform[5] - lastY) > 5) {
+                    pageText += '\n';
+                }
+                
+                pageText += item.str;
+                lastY = item.transform[5];
+            });
+            
+            fullText += pageText + '\n\n'; // Separar páginas con doble salto
         }
         
         console.log(`✅ Extracción con pdfjs-dist exitosa: ${fullText.length} caracteres`);
+        console.log('📄 Muestra del texto extraído (primeros 500 chars):', fullText.substring(0, 500));
+        
         return fullText;
         
     } catch (error) {
@@ -732,20 +747,35 @@ module.exports = async (req, res) => {
                     // Para PDF, usar extracción mejorada específica para Vercel
                     try {
                         console.log('📄 Procesando archivo PDF en Vercel...');
-                        const pdfParse = require('pdf-parse');
                         
-                        // Opciones específicas para Vercel
-                        const options = {
-                            normalizeWhitespace: true,
-                            disableCombineTextItems: false,
-                            preserveWhitespace: true
-                        };
+                        // INTENTAR PRIMERO CON pdfjs-dist (método preferido)
+                        console.log('🔄 Intentando extracción con pdfjs-dist...');
+                        let extractedTextFromPdfJS = await extractPDFWithPdfJS(file.buffer);
                         
-                        const pdfData = await pdfParse(file.buffer, options);
-                        extractedText = pdfData.text;
+                        if (extractedTextFromPdfJS && extractedTextFromPdfJS.length > 100) {
+                            console.log('✅ Usando extracción de pdfjs-dist');
+                            extractedText = extractedTextFromPdfJS;
+                        } else {
+                            console.log('⚠️ pdfjs-dist falló, usando pdf-parse como fallback');
+                            
+                            // Fallback a pdf-parse
+                            const pdfParse = require('pdf-parse');
+                            
+                            // Opciones específicas para Vercel (mejoradas para preservar estructura)
+                            const options = {
+                                normalizeWhitespace: false, // Cambiado a false para preservar espacios
+                                disableCombineTextItems: true, // Cambiado a true para mantener estructura
+                                preserveWhitespace: true,
+                                max: 0, // Sin límite de páginas
+                                version: 'v2.0.550'
+                            };
+                            
+                            const pdfData = await pdfParse(file.buffer, options);
+                            extractedText = pdfData.text;
+                        }
                         
                         console.log(`📄 Texto extraído del PDF: ${extractedText.length} caracteres`);
-                        console.log(`📄 Número de páginas detectadas: ${pdfData.numpages || 'Desconocido'}`);
+                        console.log(`📄 Número de páginas detectadas: ${pdfData?.numpages || 'Desconocido'}`);
                         
                         // Log de una muestra del texto para debugging
                         const sampleText = extractedText.substring(0, 1000);
@@ -755,26 +785,27 @@ module.exports = async (req, res) => {
                         console.log('🔧 Aplicando limpieza específica para Vercel...');
                         console.log('📄 Texto original (primeros 500 chars):', extractedText.substring(0, 500));
                         
-                        // Normalizar solo saltos de línea (sin limpiar espacios)
+                        // LIMPIEZA MÍNIMA: Solo normalizar saltos de línea básicos
+                        console.log('📄 Aplicando limpieza mínima...');
+                        
+                        // Solo normalizar saltos de línea (sin tocar espacios)
+                        const originalText = extractedText;
                         extractedText = extractedText
                             .replace(/\r\n/g, '\n')
                             .replace(/\r/g, '\n');
                         
                         console.log('📄 Texto después de normalizar saltos de línea (primeros 500 chars):', extractedText.substring(0, 500));
                         
-                        // Separar por líneas y limpiar solo espacios al inicio/final
-                        const lines = extractedText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+                        // Verificar si hubo cambios significativos
+                        if (originalText !== extractedText) {
+                            console.log('⚠️ Se aplicaron cambios en saltos de línea');
+                        } else {
+                            console.log('✅ No se aplicaron cambios en saltos de línea');
+                        }
                         
-                        console.log(`📄 Número de líneas encontradas: ${lines.length}`);
-                        console.log('📄 Primeras 5 líneas:');
-                        lines.slice(0, 5).forEach((line, index) => {
-                            console.log(`${index + 1}: "${line}"`);
-                        });
-                        
-                        // Reconstruir el texto con líneas bien separadas (sin limpiar espacios internos)
-                        extractedText = lines.join('\n');
-                        
-                        console.log(`📄 Texto después de limpieza: ${extractedText.length} caracteres`);
+                        // NO APLICAR LIMPIEZA ADICIONAL - preservar estructura original
+                        console.log('📄 Preservando estructura original del texto');
+                        console.log(`📄 Longitud final: ${extractedText.length} caracteres`);
                         console.log('📄 Texto final (primeros 500 chars):', extractedText.substring(0, 500));
                         
                         // Buscar cantidades específicas en el texto para verificar
@@ -812,9 +843,10 @@ module.exports = async (req, res) => {
                         console.log('📄 Longitud:', extractedText.length);
                         console.log('📄 Muestra:', extractedText.substring(0, 300));
                         
-                        extractedText = preprocessText(extractedText);
+                        // TEMPORALMENTE DESACTIVADO: preprocessText(extractedText);
+                        console.log('⚠️ preprocessText() DESACTIVADO temporalmente');
                         
-                        console.log('🔄 DESPUÉS de preprocessText:');
+                        console.log('🔄 DESPUÉS de preprocessText (sin cambios):');
                         console.log('📄 Longitud:', extractedText.length);
                         console.log('📄 Muestra:', extractedText.substring(0, 300));
                         
@@ -823,9 +855,10 @@ module.exports = async (req, res) => {
                         console.log('📄 Longitud:', extractedText.length);
                         console.log('📄 Muestra:', extractedText.substring(0, 300));
                         
-                        extractedText = fixVercelSpecificIssues(extractedText);
+                        // TEMPORALMENTE DESACTIVADO: fixVercelSpecificIssues(extractedText);
+                        console.log('⚠️ fixVercelSpecificIssues() DESACTIVADO temporalmente');
                         
-                        console.log('🔄 DESPUÉS de fixVercelSpecificIssues:');
+                        console.log('🔄 DESPUÉS de fixVercelSpecificIssues (sin cambios):');
                         console.log('📄 Longitud:', extractedText.length);
                         console.log('📄 Muestra:', extractedText.substring(0, 300));
                         
