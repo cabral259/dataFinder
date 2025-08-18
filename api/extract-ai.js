@@ -435,127 +435,111 @@ function generateExcel(structuredData) {
     // Crear registros usando método mejorado
     const records = [];
     
-    // Método 1: Procesar datos secuencialmente
+    // Método 1: Procesar datos secuencialmente para mantener relaciones
     if (structuredData && structuredData.length > 0) {
-        console.log('🔄 Usando método secuencial para crear registros...');
+        console.log('🔄 Usando método secuencial mejorado para crear registros...');
         
+        // Crear un mapa para mantener las relaciones
+        const orderArticleMap = new Map();
         let currentOrder = '';
-        let currentArticleName = '';
-        let currentQuantities = [];
+        let currentArticle = '';
         
+        // Primera pasada: identificar relaciones orden-artículo
         for (let i = 0; i < structuredData.length; i++) {
             const item = structuredData[i];
             const label = item.label || item.nombre || '';
             const value = item.value || item.valor || '';
             
             if (label.toLowerCase().includes('número de orden') || label.toLowerCase().includes('numero de orden') || label.toLowerCase().includes('order number')) {
-                // Si tenemos datos acumulados, crear registros
-                if (currentOrder && currentArticleName) {
-                    if (currentQuantities.length === 0) {
+                currentOrder = value;
+                console.log(`📋 Encontrado orden: ${currentOrder}`);
+            } else if (label.toLowerCase().includes('nombre de artículo') || label.toLowerCase().includes('nombre de articulo') || label.toLowerCase().includes('article name')) {
+                currentArticle = value;
+                console.log(`📋 Encontrado artículo: ${currentArticle}`);
+                
+                // Guardar la relación orden-artículo
+                if (currentOrder && currentArticle) {
+                    orderArticleMap.set(currentOrder, currentArticle);
+                    console.log(`📋 Relación guardada: ${currentOrder} → ${currentArticle}`);
+                }
+            }
+        }
+        
+        console.log('📋 Mapa de relaciones orden-artículo:', orderArticleMap);
+        
+        // Segunda pasada: asignar cantidades a las relaciones correctas
+        let quantityIndex = 0;
+        const processedOrders = new Set();
+        
+        for (const order of uniqueOrders) {
+            const article = orderArticleMap.get(order);
+            
+            if (article) {
+                // Buscar cantidades que correspondan a este orden
+                // Por ahora, asignar cantidades secuencialmente
+                const orderQuantities = [];
+                
+                // Asignar al menos una cantidad por orden
+                if (quantityIndex < quantities.length) {
+                    orderQuantities.push(quantities[quantityIndex]);
+                    quantityIndex++;
+                }
+                
+                // Si hay más cantidades y este orden aparece múltiples veces, asignar más
+                const orderCount = orderNumbers.filter(o => o === order).length;
+                for (let i = 1; i < orderCount && quantityIndex < quantities.length; i++) {
+                    orderQuantities.push(quantities[quantityIndex]);
+                    quantityIndex++;
+                }
+                
+                // Crear registros para este orden
+                if (orderQuantities.length > 0) {
+                    for (const quantity of orderQuantities) {
                         records.push({
                             loadId: loadId,
-                            orderNumber: currentOrder,
-                            articleName: currentArticleName,
-                            quantity: ''
+                            orderNumber: order,
+                            articleName: article,
+                            quantity: quantity
                         });
-                    } else {
-                        // Crear un registro por cada cantidad
-                        for (const quantity of currentQuantities) {
-                            console.log(`📝 Creando registro: Orden=${currentOrder}, Artículo=${currentArticleName}, Cantidad="${quantity}"`);
-                            records.push({
-                                loadId: loadId,
-                                orderNumber: currentOrder,
-                                articleName: currentArticleName,
-                                quantity: quantity
-                            });
-                        }
+                        console.log(`📝 Registro creado: ${order} | ${article} | ${quantity}`);
                     }
-                }
-                
-                // Iniciar nuevo registro
-                currentOrder = value;
-                currentArticleName = '';
-                currentQuantities = [];
-                
-            } else if (label.toLowerCase().includes('nombre de artículo') || label.toLowerCase().includes('nombre de articulo') || label.toLowerCase().includes('article name')) {
-                currentArticleName = value;
-            } else if (label.toLowerCase().includes('cantidad')) {
-                console.log(`📦 Agregando cantidad: "${value}" para orden: ${currentOrder}`);
-                currentQuantities.push(value);
-            }
-        }
-        
-        // Procesar el último registro
-        if (currentOrder && currentArticleName) {
-            if (currentQuantities.length === 0) {
-                records.push({
-                    loadId: loadId,
-                    orderNumber: currentOrder,
-                    articleName: currentArticleName,
-                    quantity: ''
-                });
-            } else {
-                // Crear un registro por cada cantidad
-                for (const quantity of currentQuantities) {
+                } else {
+                    // Si no hay cantidades, crear registro vacío
                     records.push({
                         loadId: loadId,
-                        orderNumber: currentOrder,
-                        articleName: currentArticleName,
+                        orderNumber: order,
+                        articleName: article,
+                        quantity: ''
+                    });
+                    console.log(`📝 Registro vacío creado: ${order} | ${article} | (sin cantidad)`);
+                }
+                
+                processedOrders.add(order);
+            }
+        }
+        
+        // Si no se procesaron todos los órdenes, usar método de fallback
+        if (records.length === 0) {
+            console.log('🔄 Usando método de fallback para crear registros...');
+            
+            // Crear combinaciones de orden + artículo + cantidad
+            const seenCombinations = new Set();
+            
+            for (let i = 0; i < orderNumbers.length; i++) {
+                const orderNumber = orderNumbers[i];
+                const articleName = articleNames[i] || '';
+                const quantity = quantities[i] || '';
+                
+                const combination = `${orderNumber}|${articleName}`;
+                
+                if (!seenCombinations.has(combination) && articleName) {
+                    seenCombinations.add(combination);
+                    records.push({
+                        loadId: loadId,
+                        orderNumber: orderNumber,
+                        articleName: articleName,
                         quantity: quantity
                     });
-                }
-            }
-        }
-    }
-    
-    // Método 2: Si no hay registros con el método secuencial, usar método de combinación
-    if (records.length === 0) {
-        console.log('🔄 Usando método de combinación para crear registros...');
-        
-        // Crear combinaciones de orden + artículo + cantidad
-        const seenCombinations = new Set();
-        
-        for (let i = 0; i < orderNumbers.length; i++) {
-            const orderNumber = orderNumbers[i];
-            const articleName = articleNames[i] || '';
-            const quantity = quantities[i] || '';
-            
-            const combination = `${orderNumber}|${articleName}`;
-            
-            if (!seenCombinations.has(combination) && articleName) {
-                seenCombinations.add(combination);
-                records.push({
-                    loadId: loadId,
-                    orderNumber: orderNumber,
-                    articleName: articleName,
-                    quantity: quantity
-                });
-            }
-        }
-    }
-    
-    // Método 3: Si aún no hay registros, crear registros con cantidades disponibles
-    if (records.length === 0) {
-        console.log('🔄 Usando método final para crear registros...');
-        
-        // Asignar cantidades a artículos de manera secuencial
-        let quantityIndex = 0;
-        
-        for (let i = 0; i < orderNumbers.length; i++) {
-            const orderNumber = orderNumbers[i];
-            const articleName = articleNames[i] || '';
-            const quantity = quantities[quantityIndex] || '';
-            
-            if (articleName) {
-                records.push({
-                    loadId: loadId,
-                    orderNumber: orderNumber,
-                    articleName: articleName,
-                    quantity: quantity
-                });
-                
-                if (quantity) {
-                    quantityIndex++;
                 }
             }
         }
