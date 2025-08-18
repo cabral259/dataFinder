@@ -13,9 +13,46 @@ const upload = multer({
 // Configuración de Gemini
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
+// Función alternativa usando pdfjs-dist para mejor extracción
+async function extractPDFWithPdfJS(buffer) {
+    try {
+        console.log('🔄 Intentando extracción con pdfjs-dist...');
+        
+        // Importar pdfjs-dist dinámicamente
+        const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js');
+        
+        // Cargar el documento
+        const loadingTask = pdfjsLib.getDocument({ data: buffer });
+        const pdf = await loadingTask.promise;
+        
+        let fullText = '';
+        
+        // Extraer texto de cada página
+        for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+            const page = await pdf.getPage(pageNum);
+            const textContent = await page.getTextContent();
+            
+            // Construir texto manteniendo la estructura
+            const pageText = textContent.items
+                .map(item => item.str)
+                .join(' ');
+            
+            fullText += pageText + '\n';
+        }
+        
+        console.log(`✅ Extracción con pdfjs-dist exitosa: ${fullText.length} caracteres`);
+        return fullText;
+        
+    } catch (error) {
+        console.log('❌ Error con pdfjs-dist:', error.message);
+        return null;
+    }
+}
+
 // Función para corregir problemas específicos de Vercel
 function fixVercelSpecificIssues(text) {
     console.log('🔧 Aplicando correcciones específicas para Vercel...');
+    console.log('📄 Texto antes de correcciones (primeros 500 chars):', text.substring(0, 500));
     
     // Detectar y corregir el problema del "1" extra en cantidades
     // Buscar patrones como "1400 UND" que deberían ser "400 UND"
@@ -31,16 +68,26 @@ function fixVercelSpecificIssues(text) {
         // Verificar que no sea un número de orden válido
         const orderPattern = new RegExp(`CPOV-${match[1]}`, 'i');
         if (!orderPattern.test(text)) {
-            correctedText = correctedText.replace(originalNumber, correctedNumber);
-            corrections.push(`${originalNumber} → ${correctedNumber}`);
-            console.log(`🔧 Corrección aplicada: ${originalNumber} → ${correctedNumber}`);
+            // Verificación adicional: asegurar que no esté cerca de un número de orden
+            const matchIndex = text.indexOf(originalNumber);
+            const beforeText = text.substring(Math.max(0, matchIndex - 50), matchIndex);
+            const afterText = text.substring(matchIndex + originalNumber.length, matchIndex + originalNumber.length + 50);
+            
+            // Solo corregir si no hay contexto de número de orden cerca
+            if (!beforeText.includes('CPOV-') && !afterText.includes('CPOV-')) {
+                correctedText = correctedText.replace(originalNumber, correctedNumber);
+                corrections.push(`${originalNumber} → ${correctedNumber}`);
+                console.log(`🔧 Corrección aplicada: ${originalNumber} → ${correctedNumber}`);
+            } else {
+                console.log(`⚠️ Corrección omitida (cerca de número de orden): ${originalNumber}`);
+            }
         }
     }
     
-    // Detectar y corregir otros patrones problemáticos
+    // Detectar y corregir otros patrones problemáticos (más conservador)
     const otherProblematicPatterns = [
-        { pattern: /1(\d{2})\s+UND/gi, description: 'números de 2 dígitos' },
-        { pattern: /1(\d{1})\s+UND/gi, description: 'números de 1 dígito' }
+        { pattern: /1(\d{2})\s+UND/gi, description: 'números de 2 dígitos' }
+        // Removido el patrón para números de 1 dígito para evitar sobrecorrecciones
     ];
     
     otherProblematicPatterns.forEach(({ pattern, description }) => {
@@ -51,9 +98,19 @@ function fixVercelSpecificIssues(text) {
             // Verificar que no sea un número de orden válido
             const orderPattern = new RegExp(`CPOV-${match[1]}`, 'i');
             if (!orderPattern.test(correctedText)) {
-                correctedText = correctedText.replace(originalNumber, correctedNumber);
-                corrections.push(`${originalNumber} → ${correctedNumber}`);
-                console.log(`🔧 Corrección aplicada (${description}): ${originalNumber} → ${correctedNumber}`);
+                // Verificación adicional: asegurar que no esté cerca de un número de orden
+                const matchIndex = correctedText.indexOf(originalNumber);
+                const beforeText = correctedText.substring(Math.max(0, matchIndex - 50), matchIndex);
+                const afterText = correctedText.substring(matchIndex + originalNumber.length, matchIndex + originalNumber.length + 50);
+                
+                // Solo corregir si no hay contexto de número de orden cerca
+                if (!beforeText.includes('CPOV-') && !afterText.includes('CPOV-')) {
+                    correctedText = correctedText.replace(originalNumber, correctedNumber);
+                    corrections.push(`${originalNumber} → ${correctedNumber}`);
+                    console.log(`🔧 Corrección aplicada (${description}): ${originalNumber} → ${correctedNumber}`);
+                } else {
+                    console.log(`⚠️ Corrección omitida (cerca de número de orden): ${originalNumber}`);
+                }
             }
         }
     });
@@ -65,6 +122,8 @@ function fixVercelSpecificIssues(text) {
         console.log('✅ No se encontraron problemas específicos de Vercel para corregir');
     }
     
+    console.log('📄 Texto después de correcciones (primeros 500 chars):', correctedText.substring(0, 500));
+    
     return correctedText;
 }
 
@@ -72,24 +131,29 @@ function fixVercelSpecificIssues(text) {
 function preprocessText(text) {
     console.log('🔧 Preprocesando texto para Vercel...');
     console.log('📄 Longitud original:', text.length);
+    console.log('📄 Texto original (primeros 500 chars):', text.substring(0, 500));
     
-    // Normalizar saltos de línea
+    // Normalizar solo saltos de línea (más conservador)
     let processedText = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
     
-    // Separar por líneas y limpiar
+    console.log('📄 Texto después de normalizar saltos de línea (primeros 500 chars):', processedText.substring(0, 500));
+    
+    // Separar por líneas y limpiar solo espacios al inicio/final
     const lines = processedText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
     
-    // Reconstruir el texto con líneas bien separadas
-    processedText = lines.join('\n');
-    
-    console.log('📄 Longitud procesada:', processedText.length);
     console.log('📄 Número de líneas:', lines.length);
     
     // Log de muestra para debugging
-    console.log('📄 Muestra del texto procesado (primeras 3 líneas):');
-    lines.slice(0, 3).forEach((line, index) => {
+    console.log('📄 Muestra del texto procesado (primeras 5 líneas):');
+    lines.slice(0, 5).forEach((line, index) => {
         console.log(`${index + 1}: "${line}"`);
     });
+    
+    // Reconstruir el texto con líneas bien separadas (sin limpiar espacios internos)
+    processedText = lines.join('\n');
+    
+    console.log('📄 Longitud procesada:', processedText.length);
+    console.log('📄 Texto final (primeros 500 chars):', processedText.substring(0, 500));
     
     return processedText;
 }
@@ -687,32 +751,31 @@ module.exports = async (req, res) => {
                         const sampleText = extractedText.substring(0, 1000);
                         console.log('📄 Muestra del texto extraído (primeros 1000 chars):', sampleText);
                         
-                        // Limpieza específica para Vercel
+                        // Limpieza específica para Vercel (más conservadora)
                         console.log('🔧 Aplicando limpieza específica para Vercel...');
+                        console.log('📄 Texto original (primeros 500 chars):', extractedText.substring(0, 500));
                         
-                        // Normalizar espacios y saltos de línea
+                        // Normalizar solo saltos de línea (sin limpiar espacios)
                         extractedText = extractedText
                             .replace(/\r\n/g, '\n')
-                            .replace(/\r/g, '\n')
-                            .replace(/\t/g, ' ')
-                            .replace(/\s+/g, ' ')
-                            .replace(/\n\s*\n/g, '\n')
-                            .trim();
+                            .replace(/\r/g, '\n');
                         
-                        // Separar por líneas y limpiar cada línea
+                        console.log('📄 Texto después de normalizar saltos de línea (primeros 500 chars):', extractedText.substring(0, 500));
+                        
+                        // Separar por líneas y limpiar solo espacios al inicio/final
                         const lines = extractedText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
                         
-                        // Reconstruir el texto con líneas bien separadas
-                        extractedText = lines.join('\n');
-                        
-                        console.log(`📄 Texto después de limpieza: ${extractedText.length} caracteres`);
-                        console.log(`📄 Número de líneas después de limpieza: ${lines.length}`);
-                        
-                        // Log de las primeras líneas limpias
-                        console.log('📄 Primeras 5 líneas después de limpieza:');
+                        console.log(`📄 Número de líneas encontradas: ${lines.length}`);
+                        console.log('📄 Primeras 5 líneas:');
                         lines.slice(0, 5).forEach((line, index) => {
                             console.log(`${index + 1}: "${line}"`);
                         });
+                        
+                        // Reconstruir el texto con líneas bien separadas (sin limpiar espacios internos)
+                        extractedText = lines.join('\n');
+                        
+                        console.log(`📄 Texto después de limpieza: ${extractedText.length} caracteres`);
+                        console.log('📄 Texto final (primeros 500 chars):', extractedText.substring(0, 500));
                         
                         // Buscar cantidades específicas en el texto para verificar
                         const quantityMatches = extractedText.match(/\b(\d{1,4})\s*UND\b/gi);
@@ -745,10 +808,26 @@ module.exports = async (req, res) => {
                         }
                         
                         // Aplicar preprocesamiento adicional específico para Vercel
+                        console.log('🔄 ANTES de preprocessText:');
+                        console.log('📄 Longitud:', extractedText.length);
+                        console.log('📄 Muestra:', extractedText.substring(0, 300));
+                        
                         extractedText = preprocessText(extractedText);
                         
+                        console.log('🔄 DESPUÉS de preprocessText:');
+                        console.log('📄 Longitud:', extractedText.length);
+                        console.log('📄 Muestra:', extractedText.substring(0, 300));
+                        
                         // Aplicar correcciones específicas para problemas de Vercel
+                        console.log('🔄 ANTES de fixVercelSpecificIssues:');
+                        console.log('📄 Longitud:', extractedText.length);
+                        console.log('📄 Muestra:', extractedText.substring(0, 300));
+                        
                         extractedText = fixVercelSpecificIssues(extractedText);
+                        
+                        console.log('🔄 DESPUÉS de fixVercelSpecificIssues:');
+                        console.log('📄 Longitud:', extractedText.length);
+                        console.log('📄 Muestra:', extractedText.substring(0, 300));
                         
                     } catch (pdfError) {
                         console.error('❌ Error extrayendo PDF:', pdfError.message);
