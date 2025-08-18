@@ -162,21 +162,25 @@ function generateExcel(structuredData) {
     return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
 }
 
-// Función principal para Vercel
+// Función principal para Vercel - VERSIÓN DE PRUEBA
 module.exports = async (req, res) => {
-    console.log('🚀 API iniciada - Método:', req.method);
+    console.log('🚀 API iniciada - Método:', req.method, 'URL:', req.url);
     
     // CORS
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
+    // Manejar preflight
     if (req.method === 'OPTIONS') {
+        console.log('✅ Preflight request manejado');
         res.status(200).end();
         return;
     }
 
+    // Verificar método
     if (req.method !== 'POST') {
+        console.log('❌ Método no permitido:', req.method);
         return res.status(405).json({
             success: false,
             error: 'Método no permitido'
@@ -184,25 +188,40 @@ module.exports = async (req, res) => {
     }
 
     try {
-        // Procesar archivo
+        console.log('📥 Iniciando procesamiento de archivo...');
+        
+        // Procesar archivo con multer
         upload.single('file')(req, res, async (err) => {
             if (err) {
                 console.error('❌ Error multer:', err);
                 return res.status(400).json({
                     success: false,
-                    error: 'Error procesando archivo'
+                    error: 'Error procesando archivo: ' + err.message
                 });
             }
 
             try {
+                console.log('📋 Body recibido:', Object.keys(req.body || {}));
+                console.log('📁 File recibido:', req.file ? 'SÍ' : 'NO');
+                
                 if (!req.file) {
+                    console.log('❌ No se subió archivo');
                     return res.status(400).json({
                         success: false,
                         error: 'No se subió archivo'
                     });
                 }
 
-                console.log('📁 Archivo recibido:', req.file.originalname, req.file.size, 'bytes');
+                console.log('📁 Archivo recibido:', req.file.originalname, req.file.size, 'bytes', req.file.mimetype);
+
+                // Verificar que el archivo tenga contenido
+                if (req.file.size === 0) {
+                    console.log('❌ Archivo vacío');
+                    return res.status(400).json({
+                        success: false,
+                        error: 'El archivo está vacío'
+                    });
+                }
 
                 // Extraer texto
                 let extractedText = '';
@@ -217,24 +236,37 @@ module.exports = async (req, res) => {
                         console.error('❌ Error PDF:', pdfError.message);
                         return res.status(500).json({
                             success: false,
-                            error: 'Error procesando PDF'
+                            error: 'Error procesando PDF: ' + pdfError.message
                         });
                     }
                 } else {
                     extractedText = req.file.buffer.toString('utf8');
+                    console.log('✅ Texto extraído:', extractedText.length, 'caracteres');
+                }
+
+                // Verificar que se extrajo texto
+                if (!extractedText || extractedText.length === 0) {
+                    console.log('❌ No se pudo extraer texto');
+                    return res.status(500).json({
+                        success: false,
+                        error: 'No se pudo extraer texto del archivo'
+                    });
                 }
 
                 // Campos solicitados
                 const fields = req.body.fields ? JSON.parse(req.body.fields) : [];
                 const requestedFields = fields.length > 0 ? fields : ['Número de orden', 'ID de carga', 'Código de artículo', 'Cantidad'];
+                console.log('📋 Campos solicitados:', requestedFields);
 
                 // Extraer datos
                 const extractedData = await extractWithAI(extractedText, requestedFields);
+                console.log('📊 Datos extraídos:', extractedData.length, 'campos');
                 
                 if (extractedData.length === 0) {
+                    console.log('❌ No se pudieron extraer datos');
                     return res.status(500).json({
                         success: false,
-                        error: 'No se pudieron extraer datos'
+                        error: 'No se pudieron extraer datos del archivo'
                     });
                 }
 
@@ -246,17 +278,19 @@ module.exports = async (req, res) => {
 
                 // Generar Excel
                 const excelBuffer = generateExcel(structuredData);
+                console.log('✅ Excel generado:', excelBuffer.length, 'bytes');
 
                 // Enviar respuesta
                 res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
                 res.setHeader('Content-Disposition', 'attachment; filename="datos_extraidos.xlsx"');
                 res.send(excelBuffer);
+                console.log('✅ Respuesta enviada exitosamente');
 
             } catch (error) {
                 console.error('❌ Error interno:', error);
                 res.status(500).json({
                     success: false,
-                    error: 'Error interno del servidor'
+                    error: 'Error interno del servidor: ' + error.message
                 });
             }
         });
@@ -265,7 +299,7 @@ module.exports = async (req, res) => {
         console.error('❌ Error general:', error);
         res.status(500).json({
             success: false,
-            error: 'Error interno del servidor'
+            error: 'Error interno del servidor: ' + error.message
         });
     }
 };
