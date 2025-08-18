@@ -823,9 +823,10 @@
             stats.style.display = 'none';
 
             const formData = new FormData();
-            selectedFiles.forEach(file => {
-                formData.append('files', file);
-            });
+            // Solo enviar el primer archivo (Vercel espera 'file', no 'files')
+            if (selectedFiles.length > 0) {
+                formData.append('file', selectedFiles[0]);
+            }
 
             // Agregar opciones de extracción (siempre inteligente)
             formData.append('extractionType', 'smart');
