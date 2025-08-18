@@ -214,11 +214,25 @@ function extractFieldsManually(text, requestedFields) {
             console.log('🔍 Buscando códigos de artículo para órdenes:', orderNumbers);
             
             orderNumbers.forEach(orderNumber => {
-                // Buscar códigos de artículo asociados a esta orden (formato: 101643-250)
+                // Buscar códigos de artículo asociados a esta orden (múltiples formatos)
                 const orderSection = text.split(orderNumber)[1] || text;
                 console.log(`🔍 Sección después de ${orderNumber} (primeros 200 chars):`, orderSection.substring(0, 200));
                 
-                const articleCodeMatches = orderSection.match(/\d{6}-\d{3}/gi);
+                // Patrones para diferentes formatos de códigos de artículo
+                const articleCodePatterns = [
+                    /\d{3}-\d{4}/gi,  // 320-0400, 326-0075
+                    /P\d{4}/gi,       // P1106
+                    /\d{6}-\d{3}/gi   // 101643-250 (formato original)
+                ];
+                
+                let articleCodeMatches = [];
+                articleCodePatterns.forEach(pattern => {
+                    const matches = orderSection.match(pattern);
+                    if (matches) {
+                        articleCodeMatches = articleCodeMatches.concat(matches);
+                    }
+                });
+                
                 console.log(`🔍 Códigos encontrados para ${orderNumber}:`, articleCodeMatches);
                 
                 if (articleCodeMatches) {
@@ -272,9 +286,11 @@ function extractFieldsManually(text, requestedFields) {
         }
         
         if (fieldLower.includes('código artículo') || fieldLower.includes('codigo articulo') || fieldLower.includes('article code')) {
-            // Buscar códigos de artículo (formato: 101643-250)
+            // Buscar códigos de artículo (múltiples formatos)
             const articleCodePatterns = [
-                /\d{6}-\d{3}/gi,
+                /\d{3}-\d{4}/gi,  // 320-0400, 326-0075
+                /P\d{4}/gi,       // P1106
+                /\d{6}-\d{3}/gi,  // 101643-250 (formato original)
                 /(?:Código de artículo|Article Code):\s*([A-Z0-9\-]+)/gi
             ];
             
