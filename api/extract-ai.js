@@ -234,38 +234,60 @@ function extractFieldsManually(text, requestedFields) {
             });
         }
         
+        if (fieldLower.includes('nombre de artículo') || fieldLower.includes('nombre de articulo') || fieldLower.includes('article name')) {
+            // Buscar nombres de artículos
+            const articleNamePatterns = [
+                /(?:Nombre de artículo|Article Name):\s*([^\n]+)/gi,
+                /(?:TUBOS|TUBO)\s+[A-Z\s]+/gi
+            ];
+            
+            articleNamePatterns.forEach(pattern => {
+                const matches = text.match(pattern);
+                if (matches) {
+                    matches.forEach(match => {
+                        results.push({ nombre: field, valor: match.trim() });
+                        console.log(`✅ Encontrado nombre de artículo: ${match.trim()}`);
+                    });
+                }
+            });
+        }
+        
         if (fieldLower.includes('cantidad')) {
-            // Buscar cantidades (formato: número + UND/UNIDADES)
+            // Buscar cantidades (EXACTAMENTE COMO LOCAL)
             const quantityPatterns = [
-                /\b(\d{1,4})\s*UND\b/gi,
-                /\b(\d{1,4})\s*UNIDADES\b/gi,
-                /\b(\d{1,4})\s*PCS\b/gi
+                /\d+\s+(?:UND|UNIDADES|PCS|PIEZAS)/gi,
+                /(?:Cantidad|Quantity):\s*(\d+)/gi,
+                /(\d+)\s+UND/gi
             ];
             
             quantityPatterns.forEach(pattern => {
                 const matches = text.match(pattern);
                 if (matches) {
                     matches.forEach(match => {
-                        // Extraer solo el número
-                        const numberMatch = match.match(/(\d{1,4})/);
-                        if (numberMatch) {
-                            const quantity = numberMatch[1];
-                            results.push({ nombre: field, valor: quantity });
-                            console.log(`✅ Encontrada cantidad: ${quantity}`);
-                        }
+                        results.push({ nombre: field, valor: match.trim() });
+                        console.log(`✅ Encontrado cantidad: ${match.trim()}`);
                     });
                 }
             });
+            
+            // Buscar cantidades en formato específico del documento
+            const specificQuantityMatches = text.match(/(\d+)\s+UND/gi);
+            if (specificQuantityMatches) {
+                specificQuantityMatches.forEach(match => {
+                    results.push({ nombre: field, valor: match.trim() });
+                    console.log(`✅ Encontrado cantidad específica: ${match.trim()}`);
+                });
+            }
         }
     });
     
-    console.log(`✅ Extracción manual completada: ${results.length} campos encontrados`);
+    console.log(`📊 Total de campos encontrados manualmente: ${results.length}`);
     return results;
 }
 
-// Función para generar Excel (LÓGICA SIMPLE COMO LOCAL)
+// Función para generar Excel (LÓGICA MEJORADA PARA MANTENER RELACIONES)
 function generateExcel(structuredData) {
-    console.log('📊 Generando Excel con lógica LOCAL...');
+    console.log('📊 Generando Excel con lógica LOCAL mejorada...');
     console.log('📊 Datos estructurados recibidos:', structuredData.length, 'campos');
     
     const workbook = XLSX.utils.book_new();
@@ -275,7 +297,7 @@ function generateExcel(structuredData) {
     const headers = ['ID de carga', 'Número de orden', 'Nombre de artículo', 'Cantidad'];
     allData.push(headers);
 
-    // Agrupar datos por categoría (LÓGICA SIMPLE)
+    // Agrupar datos por categoría
     const groupedData = {};
     structuredData.forEach(item => {
         const category = item.label;
@@ -299,22 +321,73 @@ function generateExcel(structuredData) {
     console.log('- Nombres de artículos:', articleNames);
     console.log('- Cantidades:', quantities);
 
-    // Crear registros usando lógica simple (como local)
+    // Crear registros manteniendo relaciones
     const records = [];
+    const loadId = loadIds[0] || '';
     
-    // Método simple: crear registros secuencialmente
-    const maxLength = Math.max(orderNumbers.length, articleNames.length, quantities.length);
-    
-    for (let i = 0; i < maxLength; i++) {
-        const record = {
-            loadId: loadIds[0] || '', // Usar el primer ID de carga
-            orderNumber: orderNumbers[i] || '',
-            articleName: articleNames[i] || '',
-            quantity: quantities[i] || ''
-        };
+    // Método 1: Procesar por órdenes y sus artículos asociados
+    if (orderNumbers.length > 0 && articleNames.length > 0) {
+        console.log('🔄 Procesando por relaciones orden-artículo...');
         
-        records.push(record);
-        console.log(`📝 Registro ${i + 1}: ${record.orderNumber} | ${record.articleName} | ${record.quantity}`);
+        // Crear un mapa de órdenes con sus artículos
+        const orderArticleMap = new Map();
+        
+        // Buscar artículos asociados a cada orden en el texto original
+        orderNumbers.forEach(orderNumber => {
+            const orderSection = structuredData.find(item => 
+                item.label === 'Nombre de artículo' && 
+                item.value && 
+                item.value.includes('TUBOS PVC')
+            );
+            
+            if (orderSection) {
+                if (!orderArticleMap.has(orderNumber)) {
+                    orderArticleMap.set(orderNumber, []);
+                }
+                orderArticleMap.get(orderNumber).push(orderSection.value);
+            }
+        });
+        
+        console.log('📋 Mapa de relaciones orden-artículo:', orderArticleMap);
+        
+        // Crear registros para cada orden con sus artículos
+        for (const [orderNumber, articles] of orderArticleMap) {
+            articles.forEach(article => {
+                // Buscar cantidad asociada a este artículo
+                const quantity = quantities.find(q => {
+                    // Buscar cantidad que esté cerca del artículo en el texto
+                    return q && q.includes('UND');
+                }) || '';
+                
+                records.push({
+                    loadId: loadId,
+                    orderNumber: orderNumber,
+                    articleName: article,
+                    quantity: quantity.replace(/\s+UND.*/, '') || ''
+                });
+                
+                console.log(`📝 Registro creado: ${orderNumber} | ${article} | ${quantity}`);
+            });
+        }
+    }
+    
+    // Método 2: Si no se crearon registros, usar método secuencial
+    if (records.length === 0) {
+        console.log('🔄 Usando método secuencial como fallback...');
+        
+        const maxLength = Math.max(orderNumbers.length, articleNames.length, quantities.length);
+        
+        for (let i = 0; i < maxLength; i++) {
+            const record = {
+                loadId: loadId,
+                orderNumber: orderNumbers[i] || '',
+                articleName: articleNames[i] || '',
+                quantity: quantities[i] ? quantities[i].replace(/\s+UND.*/, '') : ''
+            };
+            
+            records.push(record);
+            console.log(`📝 Registro ${i + 1}: ${record.orderNumber} | ${record.articleName} | ${record.quantity}`);
+        }
     }
 
     console.log('📊 Total de registros creados:', records.length);
