@@ -211,10 +211,15 @@ function extractFieldsManually(text, requestedFields) {
             
             // Para cada orden encontrada, buscar sus códigos de artículo asociados
             const orderNumbers = Array.from(seenOrderNumbers);
+            console.log('🔍 Buscando códigos de artículo para órdenes:', orderNumbers);
+            
             orderNumbers.forEach(orderNumber => {
                 // Buscar códigos de artículo asociados a esta orden (formato: 101643-250)
                 const orderSection = text.split(orderNumber)[1] || text;
+                console.log(`🔍 Sección después de ${orderNumber} (primeros 200 chars):`, orderSection.substring(0, 200));
+                
                 const articleCodeMatches = orderSection.match(/\d{6}-\d{3}/gi);
+                console.log(`🔍 Códigos encontrados para ${orderNumber}:`, articleCodeMatches);
                 
                 if (articleCodeMatches) {
                     articleCodeMatches.forEach(articleCode => {
@@ -224,6 +229,8 @@ function extractFieldsManually(text, requestedFields) {
                             console.log(`✅ Encontrado código de artículo: ${cleanArticleCode}`);
                         }
                     });
+                } else {
+                    console.log(`⚠️ No se encontraron códigos de artículo para orden: ${orderNumber}`);
                 }
             });
         }
