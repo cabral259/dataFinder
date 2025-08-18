@@ -13,6 +13,61 @@ const upload = multer({
 // Configuración de Gemini
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
+// Función para corregir problemas específicos de Vercel
+function fixVercelSpecificIssues(text) {
+    console.log('🔧 Aplicando correcciones específicas para Vercel...');
+    
+    // Detectar y corregir el problema del "1" extra en cantidades
+    // Buscar patrones como "1400 UND" que deberían ser "400 UND"
+    const problematicPattern = /1(\d{3})\s+UND/gi;
+    let correctedText = text;
+    let corrections = [];
+    
+    let match;
+    while ((match = problematicPattern.exec(text)) !== null) {
+        const originalNumber = match[0]; // "1400 UND"
+        const correctedNumber = match[1] + ' UND'; // "400 UND"
+        
+        // Verificar que no sea un número de orden válido
+        const orderPattern = new RegExp(`CPOV-${match[1]}`, 'i');
+        if (!orderPattern.test(text)) {
+            correctedText = correctedText.replace(originalNumber, correctedNumber);
+            corrections.push(`${originalNumber} → ${correctedNumber}`);
+            console.log(`🔧 Corrección aplicada: ${originalNumber} → ${correctedNumber}`);
+        }
+    }
+    
+    // Detectar y corregir otros patrones problemáticos
+    const otherProblematicPatterns = [
+        { pattern: /1(\d{2})\s+UND/gi, description: 'números de 2 dígitos' },
+        { pattern: /1(\d{1})\s+UND/gi, description: 'números de 1 dígito' }
+    ];
+    
+    otherProblematicPatterns.forEach(({ pattern, description }) => {
+        while ((match = pattern.exec(correctedText)) !== null) {
+            const originalNumber = match[0];
+            const correctedNumber = match[1] + ' UND';
+            
+            // Verificar que no sea un número de orden válido
+            const orderPattern = new RegExp(`CPOV-${match[1]}`, 'i');
+            if (!orderPattern.test(correctedText)) {
+                correctedText = correctedText.replace(originalNumber, correctedNumber);
+                corrections.push(`${originalNumber} → ${correctedNumber}`);
+                console.log(`🔧 Corrección aplicada (${description}): ${originalNumber} → ${correctedNumber}`);
+            }
+        }
+    });
+    
+    if (corrections.length > 0) {
+        console.log(`🔧 Total de correcciones aplicadas: ${corrections.length}`);
+        console.log('🔧 Lista de correcciones:', corrections);
+    } else {
+        console.log('✅ No se encontraron problemas específicos de Vercel para corregir');
+    }
+    
+    return correctedText;
+}
+
 // Función de preprocesamiento de texto para mejorar extracción en Vercel
 function preprocessText(text) {
     console.log('🔧 Preprocesando texto para Vercel...');
@@ -626,11 +681,19 @@ module.exports = async (req, res) => {
                 const file = files[0];
                 
                 if (file.mimetype === 'application/pdf') {
-                    // Para PDF, usar extracción mejorada
+                    // Para PDF, usar extracción mejorada específica para Vercel
                     try {
-                        console.log('📄 Procesando archivo PDF...');
+                        console.log('📄 Procesando archivo PDF en Vercel...');
                         const pdfParse = require('pdf-parse');
-                        const pdfData = await pdfParse(file.buffer);
+                        
+                        // Opciones específicas para Vercel
+                        const options = {
+                            normalizeWhitespace: true,
+                            disableCombineTextItems: false,
+                            preserveWhitespace: true
+                        };
+                        
+                        const pdfData = await pdfParse(file.buffer, options);
                         extractedText = pdfData.text;
                         
                         console.log(`📄 Texto extraído del PDF: ${extractedText.length} caracteres`);
@@ -639,6 +702,33 @@ module.exports = async (req, res) => {
                         // Log de una muestra del texto para debugging
                         const sampleText = extractedText.substring(0, 1000);
                         console.log('📄 Muestra del texto extraído (primeros 1000 chars):', sampleText);
+                        
+                        // Limpieza específica para Vercel
+                        console.log('🔧 Aplicando limpieza específica para Vercel...');
+                        
+                        // Normalizar espacios y saltos de línea
+                        extractedText = extractedText
+                            .replace(/\r\n/g, '\n')
+                            .replace(/\r/g, '\n')
+                            .replace(/\t/g, ' ')
+                            .replace(/\s+/g, ' ')
+                            .replace(/\n\s*\n/g, '\n')
+                            .trim();
+                        
+                        // Separar por líneas y limpiar cada línea
+                        const lines = extractedText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+                        
+                        // Reconstruir el texto con líneas bien separadas
+                        extractedText = lines.join('\n');
+                        
+                        console.log(`📄 Texto después de limpieza: ${extractedText.length} caracteres`);
+                        console.log(`📄 Número de líneas después de limpieza: ${lines.length}`);
+                        
+                        // Log de las primeras líneas limpias
+                        console.log('📄 Primeras 5 líneas después de limpieza:');
+                        lines.slice(0, 5).forEach((line, index) => {
+                            console.log(`${index + 1}: "${line}"`);
+                        });
                         
                         // Buscar cantidades específicas en el texto para verificar
                         const quantityMatches = extractedText.match(/\b(\d{1,4})\s*UND\b/gi);
@@ -670,8 +760,11 @@ module.exports = async (req, res) => {
                             console.warn('⚠️ Texto extraído muy corto, puede haber problemas con el PDF');
                         }
                         
-                        // Preprocesar el texto extraído del PDF
+                        // Aplicar preprocesamiento adicional específico para Vercel
                         extractedText = preprocessText(extractedText);
+                        
+                        // Aplicar correcciones específicas para problemas de Vercel
+                        extractedText = fixVercelSpecificIssues(extractedText);
                         
                     } catch (pdfError) {
                         console.error('❌ Error extrayendo PDF:', pdfError.message);
