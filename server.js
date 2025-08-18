@@ -209,19 +209,19 @@ function extractFieldsManually(text, requestedFields) {
                 }
             });
             
-            // Para cada orden encontrada, buscar sus artículos asociados
+            // Para cada orden encontrada, buscar sus códigos de artículo asociados
             const orderNumbers = Array.from(seenOrderNumbers);
             orderNumbers.forEach(orderNumber => {
-                // Buscar artículos asociados a esta orden
+                // Buscar códigos de artículo asociados a esta orden (formato: 101643-250)
                 const orderSection = text.split(orderNumber)[1] || text;
-                const articleMatches = orderSection.match(/([A-Z\s\d\/\"\-\'\.]+(?:SONACA|CORVI)[A-Z\s\d\/\"\-\'\.]*)/gi);
+                const articleCodeMatches = orderSection.match(/\d{6}-\d{3}/gi);
                 
-                if (articleMatches) {
-                    articleMatches.forEach(article => {
-                        const cleanArticle = article.trim();
-                        if (cleanArticle.length > 10) { // Filtrar artículos válidos
-                            results.push({ nombre: 'Nombre de artículo', valor: cleanArticle });
-                            console.log(`✅ Encontrado artículo: ${cleanArticle}`);
+                if (articleCodeMatches) {
+                    articleCodeMatches.forEach(articleCode => {
+                        const cleanArticleCode = articleCode.trim();
+                        if (cleanArticleCode.length > 8) { // Filtrar códigos válidos (formato: 101643-250)
+                            results.push({ nombre: 'Código de artículo', valor: cleanArticleCode });
+                            console.log(`✅ Encontrado código de artículo: ${cleanArticleCode}`);
                         }
                     });
                 }
@@ -265,9 +265,9 @@ function extractFieldsManually(text, requestedFields) {
         }
         
         if (fieldLower.includes('código artículo') || fieldLower.includes('codigo articulo') || fieldLower.includes('article code')) {
-            // Buscar códigos de artículo (formato Pxxxx)
+            // Buscar códigos de artículo (formato: 101643-250)
             const articleCodePatterns = [
-                /P\d{4,}/gi,
+                /\d{6}-\d{3}/gi,
                 /(?:Código de artículo|Article Code):\s*([A-Z0-9\-]+)/gi
             ];
             
@@ -277,24 +277,6 @@ function extractFieldsManually(text, requestedFields) {
                     matches.forEach(match => {
                         results.push({ nombre: field, valor: match.trim() });
                         console.log(`✅ Encontrado código de artículo: ${match.trim()}`);
-                    });
-                }
-            });
-        }
-        
-        if (fieldLower.includes('nombre de artículo') || fieldLower.includes('nombre de articulo') || fieldLower.includes('article name')) {
-            // Buscar nombres de artículos
-            const articleNamePatterns = [
-                /(?:Nombre de artículo|Article Name):\s*([^\n]+)/gi,
-                /(?:TUBOS|TUBO)\s+[A-Z\s]+/gi
-            ];
-            
-            articleNamePatterns.forEach(pattern => {
-                const matches = text.match(pattern);
-                if (matches) {
-                    matches.forEach(match => {
-                        results.push({ nombre: field, valor: match.trim() });
-                        console.log(`✅ Encontrado nombre de artículo: ${match.trim()}`);
                     });
                 }
             });
@@ -876,7 +858,7 @@ async function generateExcel(fileName, structuredData, fullText) {
                     currentArticleName = value;
                 } else if (label.toLowerCase().includes('cantidad')) {
                     currentQuantities.push(value);
-                } else if (label.toLowerCase().includes('nombre de artículo') || label.toLowerCase().includes('nombre de articulo')) {
+                } else if (label.toLowerCase().includes('código de artículo') || label.toLowerCase().includes('codigo de articulo')) {
                     currentArticleName = value;
                 }
             }
@@ -907,7 +889,7 @@ async function generateExcel(fileName, structuredData, fullText) {
             console.log('📊 Registros agrupados:', records.length, 'registros creados');
     
     // Crear encabezados
-    const headers = ['ID de carga', 'Número de orden', 'Nombre de artículo', 'Cantidad'];
+    const headers = ['ID de carga', 'Número de orden', 'Código de artículo', 'Cantidad'];
     allData.push(headers);
     
     // Crear filas de datos
@@ -934,7 +916,7 @@ async function generateExcel(fileName, structuredData, fullText) {
     mainWorksheet['!cols'] = [
         { width: 20 },  // ID de carga
         { width: 25 },  // Número de orden
-        { width: 50 },  // Nombre de artículo
+        { width: 20 },  // Código de artículo
         { width: 15 }   // Cantidad
     ];
     

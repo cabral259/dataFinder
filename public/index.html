@@ -688,8 +688,8 @@
                                     <span>ID de carga</span>
                                 </label>
                                 <label class="radio-label">
-                                    <input type="checkbox" id="articleName" value="Nombre de artículo">
-                                    <span>Nombre de artículo</span>
+                                    <input type="checkbox" id="articleName" value="Código de artículo">
+                                    <span>Código de artículo</span>
                                 </label>
                                 <label class="radio-label">
                                     <input type="checkbox" id="quantity" value="Cantidad">
@@ -813,7 +813,7 @@
             // Validar que todos los campos estén seleccionados
             if (!orderNumberCheckbox.checked || !loadIdCheckbox.checked || 
                 !articleNameCheckbox.checked || !quantityCheckbox.checked) {
-                alert('⚠️ Por favor selecciona todos los campos: Número de orden, ID de carga, Nombre de artículo y Cantidad');
+                alert('⚠️ Por favor selecciona todos los campos: Número de orden, ID de carga, Código de artículo y Cantidad');
                 return;
             }
 
@@ -840,7 +840,7 @@
                 selectedFields.push('ID de carga');
             }
             if (articleNameCheckbox.checked) {
-                selectedFields.push('Nombre de artículo');
+                selectedFields.push('Código de artículo');
             }
             if (quantityCheckbox.checked) {
                 selectedFields.push('Cantidad');
@@ -1059,7 +1059,7 @@
                                 selectedFields.push('ID de carga');
                             }
                             if (articleNameCheckbox.checked) {
-                                selectedFields.push('Nombre de artículo');
+                                selectedFields.push('Código de artículo');
                             }
                             if (quantityCheckbox.checked) {
                                 selectedFields.push('Cantidad');
