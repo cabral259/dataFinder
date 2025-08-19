@@ -111,24 +111,111 @@ function extractFieldsManually(textoPlano, camposSolicitados) {
 }
 
 async function generateExcel(data) {
-  console.log('📊 Generando Excel con exceljs...');
+  console.log('📊 Generando Excel con estructura correcta...');
   
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet('Datos Extraídos');
 
-  // Configurar columnas
+  // Configurar columnas específicas como en el servidor local
   worksheet.columns = [
-    { header: 'Campo', key: 'label', width: 30 },
-    { header: 'Valor', key: 'value', width: 50 },
+    { header: 'ID de carga', key: 'loadId', width: 20 },
+    { header: 'Número de orden', key: 'orderNumber', width: 25 },
+    { header: 'Código de artículo', key: 'articleCode', width: 20 },
+    { header: 'Cantidad', key: 'quantity', width: 15 },
   ];
 
-  // Agregar datos
-  data.forEach(item => {
-    worksheet.addRow({
-      label: item.nombre,
-      value: item.valor
+  // Agrupar datos por orden y artículo
+  const records = [];
+  let currentOrder = '';
+  let currentArticleCode = '';
+  let currentQuantities = [];
+
+  for (let i = 0; i < data.length; i++) {
+    const item = data[i];
+    const label = item.nombre || '';
+    const value = item.valor || '';
+
+    if (label.toLowerCase().includes('número de orden') || label.toLowerCase().includes('numero de orden')) {
+      if (currentOrder && currentArticleCode) {
+        if (currentQuantities.length > 0) {
+          records.push({ 
+            loadId: '', 
+            orderNumber: currentOrder, 
+            articleCode: currentArticleCode, 
+            quantity: currentQuantities[0].replace(/\s+UND.*/, '') 
+          });
+        } else {
+          records.push({ 
+            loadId: '', 
+            orderNumber: currentOrder, 
+            articleCode: currentArticleCode, 
+            quantity: '' 
+          });
+        }
+      }
+      currentOrder = value;
+      currentArticleCode = '';
+      currentQuantities = [];
+    } else if (label.toLowerCase().includes('id de carga')) {
+      // Actualizar loadId para todos los registros existentes
+      records.forEach(record => {
+        if (!record.loadId) record.loadId = value;
+      });
+    } else if (label.toLowerCase().includes('código de artículo') || label.toLowerCase().includes('codigo de articulo')) {
+      if (currentOrder && currentArticleCode) {
+        if (currentQuantities.length > 0) {
+          records.push({ 
+            loadId: '', 
+            orderNumber: currentOrder, 
+            articleCode: currentArticleCode, 
+            quantity: currentQuantities[0].replace(/\s+UND.*/, '') 
+          });
+        } else {
+          records.push({ 
+            loadId: '', 
+            orderNumber: currentOrder, 
+            articleCode: currentArticleCode, 
+            quantity: '' 
+          });
+        }
+      }
+      currentArticleCode = value;
+      currentQuantities = [];
+    } else if (label.toLowerCase().includes('cantidad')) {
+      currentQuantities.push(value);
+    }
+  }
+
+  // Agregar el último registro
+  if (currentOrder && currentArticleCode) {
+    if (currentQuantities.length > 0) {
+      records.push({ 
+        loadId: '', 
+        orderNumber: currentOrder, 
+        articleCode: currentArticleCode, 
+        quantity: currentQuantities[0].replace(/\s+UND.*/, '') 
+      });
+    } else {
+      records.push({ 
+        loadId: '', 
+        orderNumber: currentOrder, 
+        articleCode: currentArticleCode, 
+        quantity: '' 
+      });
+    }
+  }
+
+  console.log('📊 Registros generados:', records.length);
+
+  // Agregar datos a la hoja
+  if (records.length > 0) {
+    records.forEach(record => {
+      worksheet.addRow(record);
     });
-  });
+  } else {
+    // Si no hay registros, agregar una fila vacía
+    worksheet.addRow(['', '', '', '']);
+  }
 
   // Aplicar estilos básicos
   worksheet.getRow(1).font = { bold: true };
@@ -140,7 +227,7 @@ async function generateExcel(data) {
 
   // Generar buffer
   const buffer = await workbook.xlsx.writeBuffer();
-  console.log('✅ Excel generado con exceljs:', buffer.length, 'bytes');
+  console.log('✅ Excel generado con estructura correcta:', buffer.length, 'bytes');
   
   return buffer;
 }
