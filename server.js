@@ -391,16 +391,16 @@ app.post('/api/extract', upload.array('files'), async (req, res) => {
 });
 
 // POST - Extracción inteligente con IA
-app.post('/api/extract-ai', upload.array('files'), async (req, res) => {
+app.post('/api/extract-ai', upload.single('file'), async (req, res) => {
     try {
-        if (!req.files || req.files.length === 0) {
+        if (!req.file) {
             return res.status(400).json({
                 success: false,
-                error: 'No se subieron archivos'
+                error: 'No se subió archivo'
             });
         }
 
-        const filePaths = req.files.map(file => file.path);
+        const filePath = req.file.path;
         const requestedFields = req.body.fields ? JSON.parse(req.body.fields) : [];
         
         if (requestedFields.length === 0) {
@@ -412,9 +412,9 @@ app.post('/api/extract-ai', upload.array('files'), async (req, res) => {
 
         console.log('🤖 Iniciando extracción con IA para campos:', requestedFields);
         
-        // Extraer texto del primer archivo
+        // Extraer texto del archivo
         const extractor = new ExtractorDatos();
-        const textResult = await extractor.extractFromMultipleFiles(filePaths, {
+        const textResult = await extractor.extractFromMultipleFiles([filePath], {
             extractionType: 'all'
         });
         
@@ -456,12 +456,10 @@ app.post('/api/extract-ai', upload.array('files'), async (req, res) => {
         // Extraer campos con IA
         const extractedFields = await extractWithAI(fullText, requestedFields);
         
-        // Limpiar archivos subidos
-        filePaths.forEach(filePath => {
-            if (fs.existsSync(filePath)) {
-                fs.unlinkSync(filePath);
-            }
-        });
+        // Limpiar archivo subido
+        if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+        }
         
         // Formatear resultados y eliminar duplicados de números de orden
         const structuredData = [];
