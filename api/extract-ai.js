@@ -117,7 +117,7 @@ function extractFieldsManually(text, requestedFields) {
     return results;
 }
 
-// Función para generar Excel simplificada
+// Función para generar Excel - LÓGICA CORREGIDA
 function generateExcel(structuredData) {
     console.log('📊 Generando Excel...');
     
@@ -128,32 +128,41 @@ function generateExcel(structuredData) {
     const headers = ['ID de carga', 'Número de orden', 'Código de artículo', 'Cantidad'];
     allData.push(headers);
 
-    // Agrupar datos
-    const groupedData = {};
-    structuredData.forEach(item => {
-        const category = item.label;
-        if (!groupedData[category]) {
-            groupedData[category] = [];
-        }
-        groupedData[category].push(item.value);
-    });
-
-    // Crear registros
-    const loadIds = groupedData['ID de carga'] || [];
-    const orderNumbers = groupedData['Número de orden'] || [];
-    const articleCodes = groupedData['Código de artículo'] || [];
-    const quantities = groupedData['Cantidad'] || [];
-
-    const maxLength = Math.max(orderNumbers.length, articleCodes.length, quantities.length);
+    // Variables para mantener el contexto
+    let currentLoadId = '';
+    let currentOrderNumber = '';
     
-    for (let i = 0; i < maxLength; i++) {
-        const row = [
-            loadIds[0] || '',
-            orderNumbers[i] || '',
-            articleCodes[i] || '',
-            quantities[i] ? quantities[i].replace(/\s+UND.*/, '') : ''
-        ];
-        allData.push(row);
+    // Procesar datos secuencialmente para mantener relaciones
+    for (let i = 0; i < structuredData.length; i++) {
+        const item = structuredData[i];
+        
+        if (item.label === 'ID de carga') {
+            currentLoadId = item.value;
+        } else if (item.label === 'Número de orden') {
+            currentOrderNumber = item.value;
+        } else if (item.label === 'Código de artículo') {
+            // Buscar la cantidad correspondiente
+            let quantity = '';
+            for (let j = i + 1; j < structuredData.length; j++) {
+                if (structuredData[j].label === 'Cantidad') {
+                    quantity = structuredData[j].value.replace(/\s+UND.*/, '');
+                    break;
+                } else if (structuredData[j].label === 'Código de artículo' || 
+                          structuredData[j].label === 'Número de orden' || 
+                          structuredData[j].label === 'ID de carga') {
+                    break; // No hay cantidad para este artículo
+                }
+            }
+            
+            // Crear fila con los datos actuales
+            const row = [
+                currentLoadId,
+                currentOrderNumber,
+                item.value,
+                quantity
+            ];
+            allData.push(row);
+        }
     }
 
     const worksheet = XLSX.utils.aoa_to_sheet(allData);
