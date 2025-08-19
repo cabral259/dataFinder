@@ -117,56 +117,192 @@ function extractFieldsManually(text, requestedFields) {
     return results;
 }
 
-// Función para generar Excel - LÓGICA CORREGIDA
+// Función para generar Excel - COPIADA DEL SERVIDOR LOCAL
 function generateExcel(structuredData) {
-    console.log('📊 Generando Excel...');
-    
+    console.log('📊 Generando Excel con', structuredData.length, 'campos extraídos...');
     const workbook = XLSX.utils.book_new();
-    const allData = [];
-
-    // Encabezados
-    const headers = ['ID de carga', 'Número de orden', 'Código de artículo', 'Cantidad'];
-    allData.push(headers);
-
-    // Variables para mantener el contexto
-    let currentLoadId = '';
-    let currentOrderNumber = '';
     
-    // Procesar datos secuencialmente para mantener relaciones
-    for (let i = 0; i < structuredData.length; i++) {
-        const item = structuredData[i];
-        
-        if (item.label === 'ID de carga') {
-            currentLoadId = item.value;
-        } else if (item.label === 'Número de orden') {
-            currentOrderNumber = item.value;
-        } else if (item.label === 'Código de artículo') {
-            // Buscar la cantidad correspondiente
-            let quantity = '';
-            for (let j = i + 1; j < structuredData.length; j++) {
-                if (structuredData[j].label === 'Cantidad') {
-                    quantity = structuredData[j].value.replace(/\s+UND.*/, '');
-                    break;
-                } else if (structuredData[j].label === 'Código de artículo' || 
-                          structuredData[j].label === 'Número de orden' || 
-                          structuredData[j].label === 'ID de carga') {
-                    break; // No hay cantidad para este artículo
+    // Agrupar datos por categoría y eliminar duplicados
+    const groupedData = {};
+    if (structuredData && structuredData.length > 0) {
+        structuredData.forEach(item => {
+            // Verificar si el item tiene la estructura correcta
+            const label = item.label || item.nombre || '';
+            const value = item.value || item.valor || '';
+            
+            if (!groupedData[label]) {
+                groupedData[label] = [];
+            }
+            
+            // Para números de orden, verificar si ya existe antes de agregar
+            if (label.toLowerCase().includes('número de orden') || 
+                label.toLowerCase().includes('numero de orden') ||
+                label.toLowerCase().includes('order number')) {
+                // Solo agregar si no existe ya
+                if (!groupedData[label].includes(value)) {
+                    groupedData[label].push(value);
+                }
+            } else {
+                // Para otras categorías (incluyendo ID de carga), agregar normalmente
+                groupedData[label].push(value);
+            }
+        });
+    }
+    
+    // Crear tabla horizontal con columnas separadas
+    const allData = [];
+    
+    // Crear registros basados en la estructura de datos extraídos
+    const records = [];
+    const loadId = groupedData['ID de carga']?.[0] || '';
+    
+    if (structuredData && structuredData.length > 0) {
+        // Método 2: Procesar secuencialmente manteniendo cada código de artículo como registro separado
+        if (structuredData && structuredData.length > 0) {
+            console.log('🔄 Usando método secuencial para mantener cada código de artículo...');
+            console.log('📊 Datos estructurados recibidos de Gemini:');
+            structuredData.forEach((item, index) => {
+                console.log(`${index + 1}. ${item.label || item.nombre}: "${item.value || item.valor}"`);
+            });
+            
+            let currentOrder = '';
+            let currentArticleCode = '';
+            let currentQuantities = [];
+            
+            for (let i = 0; i < structuredData.length; i++) {
+                const item = structuredData[i];
+                const label = item.label || item.nombre || '';
+                const value = item.value || item.valor || '';
+                
+                if (label.toLowerCase().includes('número de orden') || label.toLowerCase().includes('numero de orden')) {
+                    // Si tenemos datos acumulados del artículo anterior, crear registro
+                    if (currentOrder && currentArticleCode) {
+                        if (currentQuantities.length > 0) {
+                            // Usar la primera cantidad (no sumar)
+                            records.push({
+                                loadId: loadId,
+                                orderNumber: currentOrder,
+                                articleName: currentArticleCode,
+                                quantity: currentQuantities[0].replace(/\s+UND.*/, '')
+                            });
+                            console.log(`📝 Registro creado: ${currentOrder} | ${currentArticleCode} | ${currentQuantities[0]}`);
+                        } else {
+                            records.push({
+                                loadId: loadId,
+                                orderNumber: currentOrder,
+                                articleName: currentArticleCode,
+                                quantity: ''
+                            });
+                        }
+                    }
+                    
+                    // Iniciar nuevo registro
+                    currentOrder = value;
+                    currentArticleCode = '';
+                    currentQuantities = [];
+                    
+                } else if (label.toLowerCase().includes('código de artículo') || label.toLowerCase().includes('codigo de articulo')) {
+                    // Si tenemos datos acumulados del artículo anterior, crear registro
+                    if (currentOrder && currentArticleCode) {
+                        if (currentQuantities.length > 0) {
+                            // Usar la primera cantidad (no sumar)
+                            records.push({
+                                loadId: loadId,
+                                orderNumber: currentOrder,
+                                articleName: currentArticleCode,
+                                quantity: currentQuantities[0].replace(/\s+UND.*/, '')
+                            });
+                            console.log(`📝 Registro creado: ${currentOrder} | ${currentArticleCode} | ${currentQuantities[0]}`);
+                        } else {
+                            records.push({
+                                loadId: loadId,
+                                orderNumber: currentOrder,
+                                articleName: currentArticleCode,
+                                quantity: ''
+                            });
+                        }
+                    }
+                    
+                    currentArticleCode = value;
+                    currentQuantities = [];
+                    
+                } else if (label.toLowerCase().includes('cantidad')) {
+                    currentQuantities.push(value);
                 }
             }
             
-            // Crear fila con los datos actuales
-            const row = [
-                currentLoadId,
-                currentOrderNumber,
-                item.value,
-                quantity
-            ];
-            allData.push(row);
+            // Procesar el último registro
+            if (currentOrder && currentArticleCode) {
+                if (currentQuantities.length > 0) {
+                    // Usar la primera cantidad (no sumar)
+                    records.push({
+                        loadId: loadId,
+                        orderNumber: currentOrder,
+                        articleName: currentArticleCode,
+                        quantity: currentQuantities[0].replace(/\s+UND.*/, '')
+                    });
+                    console.log(`📝 Último registro creado: ${currentOrder} | ${currentArticleCode} | ${currentQuantities[0]}`);
+                } else {
+                    records.push({
+                        loadId: loadId,
+                        orderNumber: currentOrder,
+                        articleName: currentArticleCode,
+                        quantity: ''
+                    });
+                }
+            }
         }
     }
 
-    const worksheet = XLSX.utils.aoa_to_sheet(allData);
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Datos Extraídos');
+    console.log('📊 Registros agrupados:', records.length, 'registros creados');
+
+    // Crear encabezados
+    const headers = ['ID de carga', 'Número de orden', 'Código de artículo', 'Cantidad'];
+    allData.push(headers);
+    
+    // Crear filas de datos
+    if (records.length > 0) {
+        records.forEach(record => {
+            const row = [
+                record.loadId,
+                record.orderNumber,
+                record.articleName,
+                record.quantity
+            ];
+            allData.push(row);
+        });
+    } else {
+        // Si no hay registros, agregar una fila vacía
+        allData.push(['', '', '', '']);
+    }
+    
+    console.log('📊 Tabla final:', allData.length, 'filas generadas');
+
+    const mainWorksheet = XLSX.utils.aoa_to_sheet(allData);
+    
+    // Aplicar estilos básicos con anchos fijos para las 4 columnas
+    mainWorksheet['!cols'] = [
+        { width: 20 },  // ID de carga
+        { width: 25 },  // Número de orden
+        { width: 20 },  // Código de artículo
+        { width: 15 }   // Cantidad
+    ];
+    
+    XLSX.utils.book_append_sheet(workbook, mainWorksheet, 'Datos Extraídos');
+    
+    // Hoja de resumen
+    const summaryData = [
+        ['RESUMEN DE EXTRACCIÓN'],
+        [''],
+        ['Categoría', 'Cantidad'],
+        ...Object.keys(groupedData).map(category => [
+            category, 
+            groupedData[category].length
+        ])
+    ];
+    
+    const summaryWorksheet = XLSX.utils.aoa_to_sheet(summaryData);
+    XLSX.utils.book_append_sheet(workbook, summaryWorksheet, 'Resumen');
 
     return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
 }
