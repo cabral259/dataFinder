@@ -849,8 +849,11 @@
             
             formData.append('fields', JSON.stringify(selectedFields));
 
-            // Usar URL completa para Vercel - NUEVA API CON FORMIDABLE
-            const apiEndpoint = window.location.origin + '/api/extract-handler';
+            // Usar URL completa - API local vs Vercel
+            const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+            const apiEndpoint = isLocalhost 
+                ? window.location.origin + '/api/extract-ai'  // Local
+                : window.location.origin + '/api/extract-handler'; // Vercel
 
             try {
                 const response = await fetch(apiEndpoint, {
