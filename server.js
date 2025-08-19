@@ -456,6 +456,14 @@ app.post('/api/extract-ai', upload.single('file'), async (req, res) => {
         // Extraer campos con IA
         const extractedFields = await extractWithAI(fullText, requestedFields);
         
+        // Validar que se extrajeron campos
+        if (!extractedFields || extractedFields.length === 0) {
+            return res.status(500).json({
+                success: false,
+                error: 'No se pudieron extraer campos del documento'
+            });
+        }
+        
         // Limpiar archivo subido
         if (fs.existsSync(filePath)) {
             fs.unlinkSync(filePath);
@@ -491,7 +499,7 @@ app.post('/api/extract-ai', upload.single('file'), async (req, res) => {
         res.json({
             success: true,
             results: [{
-                fileName: req.files[0].originalname,
+                fileName: req.file.originalname,
                 structuredData: structuredData,
                 fullText: fullText.substring(0, 1000) // Limitar para respuesta
             }],
@@ -505,17 +513,13 @@ app.post('/api/extract-ai', upload.single('file'), async (req, res) => {
     } catch (error) {
         console.error('❌ Error en extracción con IA:', error);
         
-        // Limpiar archivos subidos en caso de error
-        if (filePaths && filePaths.length > 0) {
-            filePaths.forEach(filePath => {
-                if (fs.existsSync(filePath)) {
-                    try {
-                        fs.unlinkSync(filePath);
-                    } catch (cleanupError) {
-                        console.log('⚠️ Error limpiando archivo:', cleanupError.message);
-                    }
-                }
-            });
+        // Limpiar archivo subido en caso de error
+        if (filePath && fs.existsSync(filePath)) {
+            try {
+                fs.unlinkSync(filePath);
+            } catch (cleanupError) {
+                console.log('⚠️ Error limpiando archivo:', cleanupError.message);
+            }
         }
         
         res.status(500).json({
