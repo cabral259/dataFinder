@@ -124,6 +124,17 @@ async function generateExcel(data) {
     { header: 'Cantidad', key: 'quantity', width: 15 },
   ];
 
+  // Extraer ID de carga primero
+  let loadId = '';
+  for (const item of data) {
+    if (item.nombre && item.nombre.toLowerCase().includes('id de carga')) {
+      loadId = item.valor || '';
+      break;
+    }
+  }
+
+  console.log('📋 ID de carga encontrado:', loadId);
+
   // Agrupar datos por orden y artículo
   const records = [];
   let currentOrder = '';
@@ -136,17 +147,18 @@ async function generateExcel(data) {
     const value = item.valor || '';
 
     if (label.toLowerCase().includes('número de orden') || label.toLowerCase().includes('numero de orden')) {
+      // Guardar registro anterior si existe
       if (currentOrder && currentArticleCode) {
         if (currentQuantities.length > 0) {
           records.push({ 
-            loadId: '', 
+            loadId: loadId, 
             orderNumber: currentOrder, 
             articleCode: currentArticleCode, 
             quantity: currentQuantities[0].replace(/\s+UND.*/, '') 
           });
         } else {
           records.push({ 
-            loadId: '', 
+            loadId: loadId, 
             orderNumber: currentOrder, 
             articleCode: currentArticleCode, 
             quantity: '' 
@@ -156,23 +168,19 @@ async function generateExcel(data) {
       currentOrder = value;
       currentArticleCode = '';
       currentQuantities = [];
-    } else if (label.toLowerCase().includes('id de carga')) {
-      // Actualizar loadId para todos los registros existentes
-      records.forEach(record => {
-        if (!record.loadId) record.loadId = value;
-      });
     } else if (label.toLowerCase().includes('código de artículo') || label.toLowerCase().includes('codigo de articulo')) {
+      // Guardar registro anterior si existe
       if (currentOrder && currentArticleCode) {
         if (currentQuantities.length > 0) {
           records.push({ 
-            loadId: '', 
+            loadId: loadId, 
             orderNumber: currentOrder, 
             articleCode: currentArticleCode, 
             quantity: currentQuantities[0].replace(/\s+UND.*/, '') 
           });
         } else {
           records.push({ 
-            loadId: '', 
+            loadId: loadId, 
             orderNumber: currentOrder, 
             articleCode: currentArticleCode, 
             quantity: '' 
@@ -182,7 +190,20 @@ async function generateExcel(data) {
       currentArticleCode = value;
       currentQuantities = [];
     } else if (label.toLowerCase().includes('cantidad')) {
-      currentQuantities.push(value);
+      // Limpiar la cantidad de caracteres extra
+      let cleanQuantity = value;
+      if (cleanQuantity.includes('UND')) {
+        cleanQuantity = cleanQuantity.replace(/\s+UND.*/, '');
+      }
+      // Verificar si hay un "1" extra al principio
+      if (cleanQuantity.startsWith('1') && cleanQuantity.length > 1) {
+        const withoutOne = cleanQuantity.substring(1);
+        // Si el número sin el "1" es válido, usarlo
+        if (!isNaN(withoutOne) && withoutOne.length > 0) {
+          cleanQuantity = withoutOne;
+        }
+      }
+      currentQuantities.push(cleanQuantity);
     }
   }
 
@@ -190,14 +211,14 @@ async function generateExcel(data) {
   if (currentOrder && currentArticleCode) {
     if (currentQuantities.length > 0) {
       records.push({ 
-        loadId: '', 
+        loadId: loadId, 
         orderNumber: currentOrder, 
         articleCode: currentArticleCode, 
-        quantity: currentQuantities[0].replace(/\s+UND.*/, '') 
+        quantity: currentQuantities[0] 
       });
     } else {
       records.push({ 
-        loadId: '', 
+        loadId: loadId, 
         orderNumber: currentOrder, 
         articleCode: currentArticleCode, 
         quantity: '' 
@@ -206,6 +227,9 @@ async function generateExcel(data) {
   }
 
   console.log('📊 Registros generados:', records.length);
+  records.forEach((record, index) => {
+    console.log(`${index + 1}. ${record.loadId} | ${record.orderNumber} | ${record.articleCode} | ${record.quantity}`);
+  });
 
   // Agregar datos a la hoja
   if (records.length > 0) {
