@@ -150,7 +150,8 @@ async function generateExcel(data) {
         // NO guardar registro aquí - solo actualizar variables
         console.log(`📝 Procesando número de orden: ${value} (anterior: ${currentOrder})`);
         currentOrder = value;
-        // NO resetear currentArticleCode para mantener continuidad
+        currentArticleCode = '';
+        currentQuantities = [];
     } else if (label.toLowerCase().includes('código de artículo') || label.toLowerCase().includes('codigo de articulo')) {
       // NO guardar registro aquí - solo actualizar variables
       console.log(`📝 Procesando código de artículo: ${value} (anterior: ${currentArticleCode})`);
@@ -198,7 +199,17 @@ async function generateExcel(data) {
           quantity: cleanQuantity
         });
         console.log(`✅ Registro guardado (cantidad válida): ${currentOrder} | ${currentArticleCode} | ${cleanQuantity}`);
-        // NO resetear currentArticleCode para mantener filas separadas
+        // Resetear código de artículo SOLO después de que se complete la secuencia
+        // Pero verificar si el siguiente item es otro código de artículo para mantener las 3 filas
+        const nextIndex = i + 1;
+        if (nextIndex < data.length) {
+          const nextItem = data[nextIndex];
+          const nextLabel = nextItem.nombre || '';
+          // Solo resetear si el siguiente NO es un código de artículo
+          if (!nextLabel.toLowerCase().includes('código de artículo') && !nextLabel.toLowerCase().includes('codigo de articulo')) {
+            currentArticleCode = '';
+          }
+        }
       } else {
         console.log(`❌ No se guardó registro: currentOrder=${currentOrder}, currentArticleCode=${currentArticleCode}, cleanQuantity=${cleanQuantity}`);
       }
