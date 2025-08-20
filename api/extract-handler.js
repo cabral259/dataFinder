@@ -169,23 +169,15 @@ async function generateExcel(data) {
       currentArticleCode = '';
       currentQuantities = [];
     } else if (label.toLowerCase().includes('código de artículo') || label.toLowerCase().includes('codigo de articulo')) {
-      // Guardar registro anterior si existe
-      if (currentOrder && currentArticleCode) {
-        if (currentQuantities.length > 0) {
-          records.push({ 
-            loadId: loadId, 
-            orderNumber: currentOrder, 
-            articleCode: currentArticleCode, 
-            quantity: currentQuantities[0]
-          });
-        } else {
-          records.push({ 
-            loadId: loadId, 
-            orderNumber: currentOrder, 
-            articleCode: currentArticleCode, 
-            quantity: '' 
-          });
-        }
+      // Solo guardar registro anterior si tenemos orden + código + cantidad completos
+      if (currentOrder && currentArticleCode && currentQuantities.length > 0) {
+        records.push({ 
+          loadId: loadId, 
+          orderNumber: currentOrder, 
+          articleCode: currentArticleCode, 
+          quantity: currentQuantities[0]
+        });
+        console.log(`📝 Registro guardado: ${currentOrder} | ${currentArticleCode} | ${currentQuantities[0]}`);
       }
       currentArticleCode = value;
       currentQuantities = [];
