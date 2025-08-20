@@ -196,8 +196,7 @@ async function generateExcel(data) {
           quantity: cleanQuantity
         });
         console.log(`✅ Registro guardado (cantidad válida): ${currentOrder} | ${currentArticleCode} | ${cleanQuantity}`);
-        // Resetear código de artículo para evitar duplicados
-        currentArticleCode = '';
+        // NO resetear currentArticleCode para mantener filas separadas
       }
     }
   }
