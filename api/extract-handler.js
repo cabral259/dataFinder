@@ -153,6 +153,7 @@ async function generateExcel(data) {
         currentQuantities = [];
     } else if (label.toLowerCase().includes('código de artículo') || label.toLowerCase().includes('codigo de articulo')) {
       // NO guardar registro aquí - solo actualizar variables
+      console.log(`📝 Procesando código de artículo: ${value} (anterior: ${currentArticleCode})`);
       currentArticleCode = value;
     } else if (label.toLowerCase().includes('cantidad')) {
       // Limpiar la cantidad de caracteres extra
@@ -188,6 +189,7 @@ async function generateExcel(data) {
       console.log('🔢 Cantidad final procesada:', cleanQuantity);
       
       // SOLO guardar registro cuando se procesa una cantidad válida
+      console.log(`🔍 Validando guardado: currentOrder=${currentOrder}, currentArticleCode=${currentArticleCode}, cleanQuantity=${cleanQuantity}`);
       if (currentOrder && currentArticleCode && cleanQuantity && cleanQuantity !== '') {
         records.push({ 
           loadId: loadId, 
@@ -197,6 +199,8 @@ async function generateExcel(data) {
         });
         console.log(`✅ Registro guardado (cantidad válida): ${currentOrder} | ${currentArticleCode} | ${cleanQuantity}`);
         // NO resetear currentArticleCode para mantener filas separadas
+      } else {
+        console.log(`❌ No se guardó registro: currentOrder=${currentOrder}, currentArticleCode=${currentArticleCode}, cleanQuantity=${cleanQuantity}`);
       }
     }
   }
