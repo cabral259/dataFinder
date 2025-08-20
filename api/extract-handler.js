@@ -192,17 +192,36 @@ async function generateExcel(data) {
     } else if (label.toLowerCase().includes('cantidad')) {
       // Limpiar la cantidad de caracteres extra
       let cleanQuantity = value;
+      
+      // Primero limpiar "UND" y otros sufijos
       if (cleanQuantity.includes('UND')) {
         cleanQuantity = cleanQuantity.replace(/\s+UND.*/, '');
       }
-      // Verificar si hay un "1" extra al principio
-      if (cleanQuantity.startsWith('1') && cleanQuantity.length > 1) {
+      if (cleanQuantity.includes('QQ')) {
+        cleanQuantity = cleanQuantity.replace(/\s+QQ.*/, '');
+      }
+      
+      // Solo verificar si hay un "1" extra al principio si es un número muy largo
+      // y el número sin el "1" también es válido y tiene sentido
+      if (cleanQuantity.startsWith('1') && cleanQuantity.length > 3) {
         const withoutOne = cleanQuantity.substring(1);
-        // Si el número sin el "1" es válido, usarlo
-        if (!isNaN(withoutOne) && withoutOne.length > 0) {
-          cleanQuantity = withoutOne;
+        // Solo aplicar si el número sin "1" es válido y no es muy corto
+        if (!isNaN(withoutOne) && withoutOne.length >= 2) {
+          // Verificar que no estemos eliminando un número válido como "12", "15", etc.
+          const firstTwoDigits = cleanQuantity.substring(0, 2);
+          if (firstTwoDigits === '12' || firstTwoDigits === '15' || firstTwoDigits === '18' || 
+              firstTwoDigits === '10' || firstTwoDigits === '11' || firstTwoDigits === '13' || 
+              firstTwoDigits === '14' || firstTwoDigits === '16' || firstTwoDigits === '17' || 
+              firstTwoDigits === '19') {
+            // Mantener el número original si empieza con números válidos
+            console.log('🔢 Manteniendo cantidad original:', cleanQuantity);
+          } else {
+            cleanQuantity = withoutOne;
+            console.log('🔢 Cantidad corregida:', withoutOne, 'de', value);
+          }
         }
       }
+      
       currentQuantities.push(cleanQuantity);
     }
   }
