@@ -154,7 +154,7 @@ async function generateExcel(data) {
             loadId: loadId, 
             orderNumber: currentOrder, 
             articleCode: currentArticleCode, 
-            quantity: currentQuantities[0].replace(/\s+UND.*/, '') 
+            quantity: currentQuantities[0]
           });
         } else {
           records.push({ 
@@ -176,7 +176,7 @@ async function generateExcel(data) {
             loadId: loadId, 
             orderNumber: currentOrder, 
             articleCode: currentArticleCode, 
-            quantity: currentQuantities[0].replace(/\s+UND.*/, '') 
+            quantity: currentQuantities[0]
           });
         } else {
           records.push({ 
