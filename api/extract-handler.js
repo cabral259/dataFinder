@@ -152,6 +152,8 @@ async function generateExcel(data) {
     const label = item.nombre || '';
     const value = item.valor || '';
 
+    console.log(`🔍 Procesando campo ${i + 1}: "${label}" = "${value}"`);
+
     if (label.toLowerCase().includes('número de orden') || label.toLowerCase().includes('numero de orden')) {
       // NO guardar registro aquí - solo actualizar variables
       currentOrder = value;
@@ -391,6 +393,10 @@ export default async function handler(req, res) {
           }
 
           console.log('✅ Datos extraídos:', extractedData.length, 'campos');
+          console.log('🔍 Primeros 3 campos extraídos:');
+          extractedData.slice(0, 3).forEach((item, index) => {
+            console.log(`  ${index + 1}. ${item.nombre}: "${item.valor}"`);
+          });
 
           // Generar Excel
           console.log('📊 Generando Excel...');
