@@ -141,100 +141,97 @@ async function generateExcel(data) {
     console.log(`${index + 1}. ${item.nombre}: "${item.valor}"`);
   });
 
-  // Agrupar datos por orden y artículo
+  // Replicar exactamente la lógica local
   const records = [];
   let currentOrder = '';
   let currentArticleCode = '';
   let currentQuantities = [];
-
+  
   for (let i = 0; i < data.length; i++) {
     const item = data[i];
     const label = item.nombre || '';
     const value = item.valor || '';
-
+    
     console.log(`🔍 Procesando campo ${i + 1}: "${label}" = "${value}"`);
-
+    
     if (label.toLowerCase().includes('número de orden') || label.toLowerCase().includes('numero de orden')) {
-      // NO guardar registro aquí - solo actualizar variables
+      // Si tenemos datos acumulados del artículo anterior, crear registro
+      if (currentOrder && currentArticleCode) {
+        if (currentQuantities.length > 0) {
+          // Usar la primera cantidad (no sumar)
+          records.push({
+            loadId: loadId,
+            orderNumber: currentOrder,
+            articleCode: currentArticleCode,
+            quantity: currentQuantities[0].replace(/\s+UND.*/, '')
+          });
+          console.log(`📝 Registro creado: ${currentOrder} | ${currentArticleCode} | ${currentQuantities[0]}`);
+        } else {
+          records.push({
+            loadId: loadId,
+            orderNumber: currentOrder,
+            articleCode: currentArticleCode,
+            quantity: ''
+          });
+        }
+      }
+      
+      // Iniciar nuevo registro
       currentOrder = value;
       currentArticleCode = '';
       currentQuantities = [];
+      
     } else if (label.toLowerCase().includes('código de artículo') || label.toLowerCase().includes('codigo de articulo')) {
-      // NO guardar registro aquí - solo actualizar variables
+      // Si tenemos datos acumulados del artículo anterior, crear registro
+      if (currentOrder && currentArticleCode) {
+        if (currentQuantities.length > 0) {
+          // Usar la primera cantidad (no sumar)
+          records.push({
+            loadId: loadId,
+            orderNumber: currentOrder,
+            articleCode: currentArticleCode,
+            quantity: currentQuantities[0].replace(/\s+UND.*/, '')
+          });
+          console.log(`📝 Registro creado: ${currentOrder} | ${currentArticleCode} | ${currentQuantities[0]}`);
+        } else {
+          records.push({
+            loadId: loadId,
+            orderNumber: currentOrder,
+            articleCode: currentArticleCode,
+            quantity: ''
+          });
+        }
+      }
+      
       currentArticleCode = value;
+      currentQuantities = [];
+      
     } else if (label.toLowerCase().includes('cantidad')) {
-      // Limpiar la cantidad de caracteres extra
-      let cleanQuantity = value;
-      
-      console.log('🔢 Procesando cantidad original:', value);
-      
-      // Extraer solo los números del valor, ignorando UND, QQ, etc.
-      const numberMatch = cleanQuantity.match(/\d+/);
-      if (numberMatch) {
-        cleanQuantity = numberMatch[0];
-        console.log('🔢 Número extraído:', cleanQuantity);
-      } else {
-        // Si no hay números, limpiar sufijos manualmente
-        if (cleanQuantity.includes('UND')) {
-          cleanQuantity = cleanQuantity.replace(/\s*UND.*/, '');
-        }
-        if (cleanQuantity.includes('QQ')) {
-          cleanQuantity = cleanQuantity.replace(/\s*QQ.*/, '');
-        }
-      }
-      
-      // Solo verificar si hay un "1" extra al principio si es un número muy largo
-      if (cleanQuantity.startsWith('1') && cleanQuantity.length > 3) {
-        const withoutOne = cleanQuantity.substring(1);
-        // Solo aplicar si el número sin "1" es válido y tiene sentido (números grandes como 1750 -> 750)
-        if (!isNaN(withoutOne) && withoutOne.length >= 3) {
-          cleanQuantity = withoutOne;
-          console.log('🔢 Cantidad corregida (1 extra eliminado):', cleanQuantity, 'de', value);
-        }
-      }
-      
-      console.log('🔢 Cantidad final procesada:', cleanQuantity);
-      
-      // SOLO guardar registro cuando se procesa una cantidad válida
-      if (currentOrder && currentArticleCode && cleanQuantity && cleanQuantity !== '') {
-        records.push({ 
-          loadId: loadId, 
-          orderNumber: currentOrder, 
-          articleCode: currentArticleCode, 
-          quantity: cleanQuantity
-        });
-        console.log(`✅ Registro guardado (cantidad válida): ${currentOrder} | ${currentArticleCode} | ${cleanQuantity}`);
-        // NO resetear currentArticleCode - mantener para múltiples cantidades del mismo artículo
-      }
+      currentQuantities.push(value);
     }
   }
 
-  // Verificar si hay un registro pendiente al final (fallback para casos edge)
+  // Agregar el último registro pendiente
   if (currentOrder && currentArticleCode) {
-    // Si no hay cantidad específica, buscar la última cantidad procesada
-    if (currentQuantities.length === 0) {
-      // Buscar hacia atrás en los datos para encontrar la última cantidad
-      for (let j = data.length - 1; j >= 0; j--) {
-        if (data[j].nombre && data[j].nombre.toLowerCase().includes('cantidad')) {
-          let lastQuantity = data[j].valor || '';
-          const numberMatch = lastQuantity.match(/\d+/);
-          if (numberMatch) {
-            lastQuantity = numberMatch[0];
-            records.push({ 
-              loadId: loadId, 
-              orderNumber: currentOrder, 
-              articleCode: currentArticleCode, 
-              quantity: lastQuantity
-            });
-            console.log(`📝 Registro final guardado (fallback): ${currentOrder} | ${currentArticleCode} | ${lastQuantity}`);
-            break;
-          }
-        }
-      }
+    if (currentQuantities.length > 0) {
+      records.push({
+        loadId: loadId,
+        orderNumber: currentOrder,
+        articleCode: currentArticleCode,
+        quantity: currentQuantities[0].replace(/\s+UND.*/, '')
+      });
+      console.log(`📝 Último registro creado: ${currentOrder} | ${currentArticleCode} | ${currentQuantities[0]}`);
+    } else {
+      records.push({
+        loadId: loadId,
+        orderNumber: currentOrder,
+        articleCode: currentArticleCode,
+        quantity: ''
+      });
     }
   }
   
-  console.log('📝 Procesamiento completado - registros guardados cuando se encontraron cantidades válidas');
+  console.log('📊 Registros agrupados:', records.length, 'registros creados');
 
   console.log('📊 Registros generados:', records.length);
   records.forEach((record, index) => {
