@@ -193,35 +193,34 @@ async function generateExcel(data) {
       // Limpiar la cantidad de caracteres extra
       let cleanQuantity = value;
       
-      // Primero limpiar "UND" y otros sufijos
-      if (cleanQuantity.includes('UND')) {
-        cleanQuantity = cleanQuantity.replace(/\s+UND.*/, '');
-      }
-      if (cleanQuantity.includes('QQ')) {
-        cleanQuantity = cleanQuantity.replace(/\s+QQ.*/, '');
-      }
+      console.log('🔢 Procesando cantidad original:', value);
       
-      // Solo verificar si hay un "1" extra al principio si es un número muy largo
-      // y el número sin el "1" también es válido y tiene sentido
-      if (cleanQuantity.startsWith('1') && cleanQuantity.length > 3) {
-        const withoutOne = cleanQuantity.substring(1);
-        // Solo aplicar si el número sin "1" es válido y no es muy corto
-        if (!isNaN(withoutOne) && withoutOne.length >= 2) {
-          // Verificar que no estemos eliminando un número válido como "12", "15", etc.
-          const firstTwoDigits = cleanQuantity.substring(0, 2);
-          if (firstTwoDigits === '12' || firstTwoDigits === '15' || firstTwoDigits === '18' || 
-              firstTwoDigits === '10' || firstTwoDigits === '11' || firstTwoDigits === '13' || 
-              firstTwoDigits === '14' || firstTwoDigits === '16' || firstTwoDigits === '17' || 
-              firstTwoDigits === '19') {
-            // Mantener el número original si empieza con números válidos
-            console.log('🔢 Manteniendo cantidad original:', cleanQuantity);
-          } else {
-            cleanQuantity = withoutOne;
-            console.log('🔢 Cantidad corregida:', withoutOne, 'de', value);
-          }
+      // Extraer solo los números del valor, ignorando UND, QQ, etc.
+      const numberMatch = cleanQuantity.match(/\d+/);
+      if (numberMatch) {
+        cleanQuantity = numberMatch[0];
+        console.log('🔢 Número extraído:', cleanQuantity);
+      } else {
+        // Si no hay números, limpiar sufijos manualmente
+        if (cleanQuantity.includes('UND')) {
+          cleanQuantity = cleanQuantity.replace(/\s*UND.*/, '');
+        }
+        if (cleanQuantity.includes('QQ')) {
+          cleanQuantity = cleanQuantity.replace(/\s*QQ.*/, '');
         }
       }
       
+      // Solo verificar si hay un "1" extra al principio si es un número muy largo
+      if (cleanQuantity.startsWith('1') && cleanQuantity.length > 3) {
+        const withoutOne = cleanQuantity.substring(1);
+        // Solo aplicar si el número sin "1" es válido y tiene sentido (números grandes como 1750 -> 750)
+        if (!isNaN(withoutOne) && withoutOne.length >= 3) {
+          cleanQuantity = withoutOne;
+          console.log('🔢 Cantidad corregida (1 extra eliminado):', cleanQuantity, 'de', value);
+        }
+      }
+      
+      console.log('🔢 Cantidad final procesada:', cleanQuantity);
       currentQuantities.push(cleanQuantity);
     }
   }
