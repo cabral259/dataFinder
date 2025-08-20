@@ -230,23 +230,15 @@ async function generateExcel(data) {
     }
   }
 
-  // Agregar el último registro
-  if (currentOrder && currentArticleCode) {
-    if (currentQuantities.length > 0) {
-      records.push({ 
-        loadId: loadId, 
-        orderNumber: currentOrder, 
-        articleCode: currentArticleCode, 
-        quantity: currentQuantities[0] 
-      });
-    } else {
-      records.push({ 
-        loadId: loadId, 
-        orderNumber: currentOrder, 
-        articleCode: currentArticleCode, 
-        quantity: '' 
-      });
-    }
+  // Verificar si hay un registro pendiente al final
+  if (currentOrder && currentArticleCode && currentQuantities.length > 0) {
+    records.push({ 
+      loadId: loadId, 
+      orderNumber: currentOrder, 
+      articleCode: currentArticleCode, 
+      quantity: currentQuantities[0] 
+    });
+    console.log(`📝 Último registro guardado: ${currentOrder} | ${currentArticleCode} | ${currentQuantities[0]}`);
   }
 
   console.log('📊 Registros generados:', records.length);
