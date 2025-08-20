@@ -146,15 +146,13 @@ async function generateExcel(data) {
     const label = item.nombre || '';
     const value = item.valor || '';
 
-          if (label.toLowerCase().includes('número de orden') || label.toLowerCase().includes('numero de orden')) {
-        // NO guardar registro aquí - solo actualizar variables
-        console.log(`📝 Procesando número de orden: ${value} (anterior: ${currentOrder})`);
-        currentOrder = value;
-        currentArticleCode = '';
-        currentQuantities = [];
+    if (label.toLowerCase().includes('número de orden') || label.toLowerCase().includes('numero de orden')) {
+      // NO guardar registro aquí - solo actualizar variables
+      currentOrder = value;
+      currentArticleCode = '';
+      currentQuantities = [];
     } else if (label.toLowerCase().includes('código de artículo') || label.toLowerCase().includes('codigo de articulo')) {
       // NO guardar registro aquí - solo actualizar variables
-      console.log(`📝 Procesando código de artículo: ${value} (anterior: ${currentArticleCode})`);
       currentArticleCode = value;
     } else if (label.toLowerCase().includes('cantidad')) {
       // Limpiar la cantidad de caracteres extra
@@ -190,7 +188,6 @@ async function generateExcel(data) {
       console.log('🔢 Cantidad final procesada:', cleanQuantity);
       
       // SOLO guardar registro cuando se procesa una cantidad válida
-      console.log(`🔍 Validando guardado: currentOrder=${currentOrder}, currentArticleCode=${currentArticleCode}, cleanQuantity=${cleanQuantity}`);
       if (currentOrder && currentArticleCode && cleanQuantity && cleanQuantity !== '') {
         records.push({ 
           loadId: loadId, 
@@ -199,9 +196,8 @@ async function generateExcel(data) {
           quantity: cleanQuantity
         });
         console.log(`✅ Registro guardado (cantidad válida): ${currentOrder} | ${currentArticleCode} | ${cleanQuantity}`);
-        // NO resetear currentArticleCode NUNCA - mantener para las 3 filas
-      } else {
-        console.log(`❌ No se guardó registro: currentOrder=${currentOrder}, currentArticleCode=${currentArticleCode}, cleanQuantity=${cleanQuantity}`);
+        // Resetear código de artículo para evitar duplicados
+        currentArticleCode = '';
       }
     }
   }
