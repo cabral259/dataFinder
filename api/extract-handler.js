@@ -118,6 +118,21 @@ function extractFieldsManually(textoPlano, camposSolicitados) {
           valor = matches[0];
         }
       }
+      
+      // Si no se encontró nada, buscar patrones más específicos
+      if (!valor || valor === 'No encontrado') {
+        // Buscar en líneas que contengan códigos de artículo
+        const lines = textoPlano.split('\n');
+        for (const line of lines) {
+          if (line.includes('QQ') || line.includes('UND')) {
+            const quantityMatch = line.match(/(\d+)\s+(QQ|UND)/i);
+            if (quantityMatch) {
+              valor = quantityMatch[0];
+              break;
+            }
+          }
+        }
+      }
     } else {
       // Patrón genérico
       const regex = new RegExp(`${campo}\\s*[:\\-]?\\s*(.+)`, 'i');
