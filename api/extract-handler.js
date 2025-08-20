@@ -38,6 +38,8 @@ async function extractWithAI(textoPlano, camposSolicitados) {
 
 Documento: ${textoPlano.substring(0, 15000)}
 
+IMPORTANTE para cantidades: Extrae el número COMPLETO con la unidad (ej: "1 QQ", "100 UND", "250 QQ")
+
 Responde SOLO con JSON en este formato:
 {"campos": [{"nombre": "campo", "valor": "valor"}]}`;
     
@@ -92,7 +94,8 @@ function extractFieldsManually(textoPlano, camposSolicitados) {
       const match = textoPlano.match(/\d{3}-\d{4}|P\d{4}|\d{6}-\d{3}/i);
       if (match) valor = match[0];
     } else if (campo.toLowerCase().includes('cantidad')) {
-      const match = textoPlano.match(/\d+\s+UND/i);
+      // Buscar cantidades con UND o QQ
+      const match = textoPlano.match(/\d+\s+(UND|QQ)/i);
       if (match) valor = match[0];
     } else {
       // Patrón genérico
