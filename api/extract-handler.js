@@ -135,6 +135,12 @@ async function generateExcel(data) {
 
   console.log('📋 ID de carga encontrado:', loadId);
 
+  // Mostrar todos los datos extraídos para debugging
+  console.log('📊 Datos estructurados recibidos de Gemini:');
+  data.forEach((item, index) => {
+    console.log(`${index + 1}. ${item.nombre}: "${item.valor}"`);
+  });
+
   // Agrupar datos por orden y artículo
   const records = [];
   let currentOrder = '';
@@ -196,14 +202,37 @@ async function generateExcel(data) {
           quantity: cleanQuantity
         });
         console.log(`✅ Registro guardado (cantidad válida): ${currentOrder} | ${currentArticleCode} | ${cleanQuantity}`);
-        // Resetear código de artículo para evitar duplicados
-        currentArticleCode = '';
+        // NO resetear currentArticleCode - mantener para múltiples cantidades del mismo artículo
       }
     }
   }
 
-  // NO guardar registros al final - solo cuando se procesa una cantidad válida
-  console.log('📝 Procesamiento completado - registros guardados solo cuando se encontraron cantidades válidas');
+  // Verificar si hay un registro pendiente al final (fallback para casos edge)
+  if (currentOrder && currentArticleCode) {
+    // Si no hay cantidad específica, buscar la última cantidad procesada
+    if (currentQuantities.length === 0) {
+      // Buscar hacia atrás en los datos para encontrar la última cantidad
+      for (let j = data.length - 1; j >= 0; j--) {
+        if (data[j].nombre && data[j].nombre.toLowerCase().includes('cantidad')) {
+          let lastQuantity = data[j].valor || '';
+          const numberMatch = lastQuantity.match(/\d+/);
+          if (numberMatch) {
+            lastQuantity = numberMatch[0];
+            records.push({ 
+              loadId: loadId, 
+              orderNumber: currentOrder, 
+              articleCode: currentArticleCode, 
+              quantity: lastQuantity
+            });
+            console.log(`📝 Registro final guardado (fallback): ${currentOrder} | ${currentArticleCode} | ${lastQuantity}`);
+            break;
+          }
+        }
+      }
+    }
+  }
+  
+  console.log('📝 Procesamiento completado - registros guardados cuando se encontraron cantidades válidas');
 
   console.log('📊 Registros generados:', records.length);
   records.forEach((record, index) => {
