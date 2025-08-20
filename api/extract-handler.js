@@ -38,12 +38,7 @@ async function extractWithAI(textoPlano, camposSolicitados) {
 
 Documento: ${textoPlano.substring(0, 15000)}
 
-IMPORTANTE:
-- Para cantidades: Extrae el número COMPLETO con la unidad (ej: "1 QQ", "100 UND", "250 QQ")
-- Asocia cada cantidad con su código de artículo correspondiente
-- NO mezcles cantidades entre diferentes artículos
-- Si hay múltiples páginas, procesa cada página por separado
-- Verifica que cada cantidad corresponda exactamente a su artículo
+IMPORTANTE: Extrae las cantidades completas con números y unidades (ej: "1 QQ", "100 UND", "250 QQ")
 
 Responde SOLO con JSON en este formato:
 {"campos": [{"nombre": "campo", "valor": "valor"}]}`;
@@ -107,9 +102,22 @@ function extractFieldsManually(textoPlano, camposSolicitados) {
       const match = textoPlano.match(/\d{3}-\d{4}|P\d{4}|\d{6}-\d{3}/i);
       if (match) valor = match[0];
     } else if (campo.toLowerCase().includes('cantidad')) {
-      // Buscar cantidades con UND o QQ
-      const match = textoPlano.match(/\d+\s+(UND|QQ)/i);
-      if (match) valor = match[0];
+      // Buscar cantidades con UND o QQ - ser más específico
+      const matches = textoPlano.match(/\d+\s+(UND|QQ)/gi);
+      if (matches && matches.length > 0) {
+        // Tomar la primera cantidad encontrada que no sea "0"
+        for (const match of matches) {
+          const number = match.match(/\d+/)[0];
+          if (number !== '0') {
+            valor = match;
+            break;
+          }
+        }
+        // Si todas son "0", tomar la primera
+        if (!valor || valor === 'No encontrado') {
+          valor = matches[0];
+        }
+      }
     } else {
       // Patrón genérico
       const regex = new RegExp(`${campo}\\s*[:\\-]?\\s*(.+)`, 'i');
