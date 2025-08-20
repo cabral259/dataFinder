@@ -38,7 +38,12 @@ async function extractWithAI(textoPlano, camposSolicitados) {
 
 Documento: ${textoPlano.substring(0, 15000)}
 
-IMPORTANTE para cantidades: Extrae el número COMPLETO con la unidad (ej: "1 QQ", "100 UND", "250 QQ")
+IMPORTANTE:
+- Para cantidades: Extrae el número COMPLETO con la unidad (ej: "1 QQ", "100 UND", "250 QQ")
+- Asocia cada cantidad con su código de artículo correspondiente
+- NO mezcles cantidades entre diferentes artículos
+- Si hay múltiples páginas, procesa cada página por separado
+- Verifica que cada cantidad corresponda exactamente a su artículo
 
 Responde SOLO con JSON en este formato:
 {"campos": [{"nombre": "campo", "valor": "valor"}]}`;
@@ -63,6 +68,14 @@ Responde SOLO con JSON en este formato:
       
       if (parsedData.campos && Array.isArray(parsedData.campos)) {
         console.log(`✅ Gemini extrajo ${parsedData.campos.length} campos`);
+        
+        // Verificar cantidades extraídas
+        parsedData.campos.forEach((campo, index) => {
+          if (campo.nombre && campo.nombre.toLowerCase().includes('cantidad')) {
+            console.log(`🔍 Cantidad ${index + 1}: "${campo.valor}"`);
+          }
+        });
+        
         return parsedData.campos;
       }
     }
