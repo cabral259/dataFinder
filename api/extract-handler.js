@@ -148,9 +148,9 @@ async function generateExcel(data) {
 
           if (label.toLowerCase().includes('número de orden') || label.toLowerCase().includes('numero de orden')) {
         // NO guardar registro aquí - solo actualizar variables
+        console.log(`📝 Procesando número de orden: ${value} (anterior: ${currentOrder})`);
         currentOrder = value;
-        currentArticleCode = '';
-        currentQuantities = [];
+        // NO resetear currentArticleCode para mantener continuidad
     } else if (label.toLowerCase().includes('código de artículo') || label.toLowerCase().includes('codigo de articulo')) {
       // NO guardar registro aquí - solo actualizar variables
       console.log(`📝 Procesando código de artículo: ${value} (anterior: ${currentArticleCode})`);
