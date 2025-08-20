@@ -125,9 +125,11 @@ function extractFieldsManually(textoPlano, camposSolicitados) {
         const lines = textoPlano.split('\n');
         for (const line of lines) {
           if (line.includes('QQ') || line.includes('UND')) {
-            const quantityMatch = line.match(/(\d+)\s+(QQ|UND)/i);
+            // Buscar números de cualquier longitud antes de QQ o UND
+            const quantityMatch = line.match(/(\d+)\s*(QQ|UND)/i);
             if (quantityMatch) {
               valor = quantityMatch[0];
+              console.log(`🔍 Cantidad encontrada en línea: "${line.trim()}" -> "${valor}"`);
               break;
             }
           }
@@ -158,16 +160,24 @@ function cleanQuantity(quantityText) {
     return '';
   }
   
-  // Extraer número de la cantidad (ej: "1 QQ" -> "1", "100 UND" -> "100")
-  const numberMatch = quantityText.match(/(\d+)/);
+  // Extraer número de la cantidad (ej: "1 QQ" -> "1", "100 UND" -> "100", "1500 QQ" -> "1500")
+  // Usar regex más específico para capturar números antes de unidades
+  const numberMatch = quantityText.match(/(\d+)\s*(QQ|UND)/i);
   if (numberMatch) {
     console.log('🔢 cleanQuantity: número encontrado:', numberMatch[1]);
     return numberMatch[1];
   }
   
-  // Fallback: remover sufijos
+  // Fallback: buscar cualquier número en el texto
+  const fallbackMatch = quantityText.match(/(\d+)/);
+  if (fallbackMatch) {
+    console.log('🔢 cleanQuantity: fallback, número encontrado:', fallbackMatch[1]);
+    return fallbackMatch[1];
+  }
+  
+  // Último fallback: remover sufijos
   const cleaned = quantityText.replace(/\s+UND.*/, '').replace(/\s+QQ.*/, '').trim();
-  console.log('🔢 cleanQuantity: fallback, resultado:', `"${cleaned}"`);
+  console.log('🔢 cleanQuantity: último fallback, resultado:', `"${cleaned}"`);
   return cleaned;
 }
 
