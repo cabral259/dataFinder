@@ -112,16 +112,24 @@ function extractFieldsManually(textoPlano, camposSolicitados) {
 
 // Función para limpiar cantidades y extraer solo números
 function cleanQuantity(quantityText) {
-  if (!quantityText) return '';
+  console.log('🔢 cleanQuantity input:', `"${quantityText}"`);
+  
+  if (!quantityText) {
+    console.log('🔢 cleanQuantity: texto vacío, retornando ""');
+    return '';
+  }
   
   // Extraer número de la cantidad (ej: "1 QQ" -> "1", "100 UND" -> "100")
   const numberMatch = quantityText.match(/(\d+)/);
   if (numberMatch) {
+    console.log('🔢 cleanQuantity: número encontrado:', numberMatch[1]);
     return numberMatch[1];
   }
   
   // Fallback: remover sufijos
-  return quantityText.replace(/\s+UND.*/, '').replace(/\s+QQ.*/, '').trim();
+  const cleaned = quantityText.replace(/\s+UND.*/, '').replace(/\s+QQ.*/, '').trim();
+  console.log('🔢 cleanQuantity: fallback, resultado:', `"${cleaned}"`);
+  return cleaned;
 }
 
 async function generateExcel(data) {
@@ -221,6 +229,7 @@ async function generateExcel(data) {
       currentQuantities = [];
       
     } else if (label.toLowerCase().includes('cantidad')) {
+      console.log('🔢 Cantidad encontrada:', `"${value}"`);
       currentQuantities.push(value);
     }
   }
