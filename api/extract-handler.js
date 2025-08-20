@@ -213,35 +213,24 @@ async function generateExcel(data) {
       }
       
       console.log('🔢 Cantidad final procesada:', cleanQuantity);
-      currentQuantities.push(cleanQuantity);
       
-      // Si tenemos orden + código + cantidad completos, guardar registro inmediatamente
-      if (currentOrder && currentArticleCode && currentQuantities.length > 0) {
+      // SOLO guardar registro cuando se procesa una cantidad válida
+      if (currentOrder && currentArticleCode && cleanQuantity && cleanQuantity !== '') {
         records.push({ 
           loadId: loadId, 
           orderNumber: currentOrder, 
           articleCode: currentArticleCode, 
-          quantity: currentQuantities[0]
+          quantity: cleanQuantity
         });
-        console.log(`✅ Registro guardado inmediatamente: ${currentOrder} | ${currentArticleCode} | ${currentQuantities[0]}`);
-        // Resetear cantidad para el siguiente registro
-        currentQuantities = [];
+        console.log(`✅ Registro guardado (cantidad válida): ${currentOrder} | ${currentArticleCode} | ${cleanQuantity}`);
         // Resetear código de artículo para evitar duplicados
         currentArticleCode = '';
       }
     }
   }
 
-  // Verificar si hay un registro pendiente al final
-  if (currentOrder && currentArticleCode && currentQuantities.length > 0) {
-    records.push({ 
-      loadId: loadId, 
-      orderNumber: currentOrder, 
-      articleCode: currentArticleCode, 
-      quantity: currentQuantities[0] 
-    });
-    console.log(`📝 Último registro guardado: ${currentOrder} | ${currentArticleCode} | ${currentQuantities[0]}`);
-  }
+  // NO guardar registros al final - solo cuando se procesa una cantidad válida
+  console.log('📝 Procesamiento completado - registros guardados solo cuando se encontraron cantidades válidas');
 
   console.log('📊 Registros generados:', records.length);
   records.forEach((record, index) => {
