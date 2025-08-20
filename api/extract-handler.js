@@ -146,41 +146,14 @@ async function generateExcel(data) {
     const label = item.nombre || '';
     const value = item.valor || '';
 
-    if (label.toLowerCase().includes('número de orden') || label.toLowerCase().includes('numero de orden')) {
-      // Guardar registro anterior si existe
-      if (currentOrder && currentArticleCode) {
-        if (currentQuantities.length > 0) {
-          records.push({ 
-            loadId: loadId, 
-            orderNumber: currentOrder, 
-            articleCode: currentArticleCode, 
-            quantity: currentQuantities[0]
-          });
-        } else {
-          records.push({ 
-            loadId: loadId, 
-            orderNumber: currentOrder, 
-            articleCode: currentArticleCode, 
-            quantity: '' 
-          });
-        }
-      }
-      currentOrder = value;
-      currentArticleCode = '';
-      currentQuantities = [];
+          if (label.toLowerCase().includes('número de orden') || label.toLowerCase().includes('numero de orden')) {
+        // NO guardar registro aquí - solo actualizar variables
+        currentOrder = value;
+        currentArticleCode = '';
+        currentQuantities = [];
     } else if (label.toLowerCase().includes('código de artículo') || label.toLowerCase().includes('codigo de articulo')) {
-      // Solo guardar registro anterior si tenemos orden + código + cantidad completos
-      if (currentOrder && currentArticleCode && currentQuantities.length > 0) {
-        records.push({ 
-          loadId: loadId, 
-          orderNumber: currentOrder, 
-          articleCode: currentArticleCode, 
-          quantity: currentQuantities[0]
-        });
-        console.log(`📝 Registro guardado: ${currentOrder} | ${currentArticleCode} | ${currentQuantities[0]}`);
-      }
+      // NO guardar registro aquí - solo actualizar variables
       currentArticleCode = value;
-      currentQuantities = [];
     } else if (label.toLowerCase().includes('cantidad')) {
       // Limpiar la cantidad de caracteres extra
       let cleanQuantity = value;
