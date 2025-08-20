@@ -226,6 +226,8 @@ async function generateExcel(data) {
         console.log(`✅ Registro guardado inmediatamente: ${currentOrder} | ${currentArticleCode} | ${currentQuantities[0]}`);
         // Resetear cantidad para el siguiente registro
         currentQuantities = [];
+        // Resetear código de artículo para evitar duplicados
+        currentArticleCode = '';
       }
     }
   }
