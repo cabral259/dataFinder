@@ -110,6 +110,20 @@ function extractFieldsManually(textoPlano, camposSolicitados) {
   return resultados;
 }
 
+// Función para limpiar cantidades y extraer solo números
+function cleanQuantity(quantityText) {
+  if (!quantityText) return '';
+  
+  // Extraer número de la cantidad (ej: "1 QQ" -> "1", "100 UND" -> "100")
+  const numberMatch = quantityText.match(/(\d+)/);
+  if (numberMatch) {
+    return numberMatch[1];
+  }
+  
+  // Fallback: remover sufijos
+  return quantityText.replace(/\s+UND.*/, '').replace(/\s+QQ.*/, '').trim();
+}
+
 async function generateExcel(data) {
   console.log('📊 Generando Excel con estructura correcta...');
   
@@ -163,7 +177,7 @@ async function generateExcel(data) {
             loadId: loadId,
             orderNumber: currentOrder,
             articleCode: currentArticleCode,
-            quantity: currentQuantities[0].replace(/\s+UND.*/, '')
+            quantity: cleanQuantity(currentQuantities[0])
           });
           console.log(`📝 Registro creado: ${currentOrder} | ${currentArticleCode} | ${currentQuantities[0]}`);
         } else {
@@ -190,7 +204,7 @@ async function generateExcel(data) {
             loadId: loadId,
             orderNumber: currentOrder,
             articleCode: currentArticleCode,
-            quantity: currentQuantities[0].replace(/\s+UND.*/, '')
+            quantity: cleanQuantity(currentQuantities[0])
           });
           console.log(`📝 Registro creado: ${currentOrder} | ${currentArticleCode} | ${currentQuantities[0]}`);
         } else {
