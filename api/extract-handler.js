@@ -214,6 +214,19 @@ async function generateExcel(data) {
       
       console.log('🔢 Cantidad final procesada:', cleanQuantity);
       currentQuantities.push(cleanQuantity);
+      
+      // Si tenemos orden + código + cantidad completos, guardar registro inmediatamente
+      if (currentOrder && currentArticleCode && currentQuantities.length > 0) {
+        records.push({ 
+          loadId: loadId, 
+          orderNumber: currentOrder, 
+          articleCode: currentArticleCode, 
+          quantity: currentQuantities[0]
+        });
+        console.log(`✅ Registro guardado inmediatamente: ${currentOrder} | ${currentArticleCode} | ${currentQuantities[0]}`);
+        // Resetear cantidad para el siguiente registro
+        currentQuantities = [];
+      }
     }
   }
 
