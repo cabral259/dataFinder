@@ -102,39 +102,51 @@ function extractFieldsManually(textoPlano, camposSolicitados) {
       const match = textoPlano.match(/\d{3}-\d{4}|P\d{4}|\d{6}-\d{3}/i);
       if (match) valor = match[0];
     } else if (campo.toLowerCase().includes('cantidad')) {
+      console.log(`🔍 Buscando cantidad en texto de ${textoPlano.length} caracteres`);
+      
       // Buscar cantidades con UND o QQ - ser más específico
       const matches = textoPlano.match(/\d+\s+(UND|QQ)/gi);
+      console.log(`🔍 Cantidades encontradas con regex principal:`, matches);
+      
       if (matches && matches.length > 0) {
         // Tomar la primera cantidad encontrada que no sea "0"
         for (const match of matches) {
           const number = match.match(/\d+/)[0];
+          console.log(`🔍 Evaluando cantidad: "${match}" -> número: "${number}"`);
           if (number !== '0') {
             valor = match;
+            console.log(`🔍 Cantidad seleccionada: "${valor}"`);
             break;
           }
         }
         // Si todas son "0", tomar la primera
         if (!valor || valor === 'No encontrado') {
           valor = matches[0];
+          console.log(`🔍 Usando primera cantidad (todas eran 0): "${valor}"`);
         }
       }
       
       // Si no se encontró nada, buscar patrones más específicos
       if (!valor || valor === 'No encontrado') {
+        console.log(`🔍 Buscando en líneas específicas...`);
         // Buscar en líneas que contengan códigos de artículo
         const lines = textoPlano.split('\n');
-        for (const line of lines) {
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
           if (line.includes('QQ') || line.includes('UND')) {
+            console.log(`🔍 Línea ${i + 1} con QQ/UND: "${line.trim()}"`);
             // Buscar números de cualquier longitud antes de QQ o UND
             const quantityMatch = line.match(/(\d+)\s*(QQ|UND)/i);
             if (quantityMatch) {
               valor = quantityMatch[0];
-              console.log(`🔍 Cantidad encontrada en línea: "${line.trim()}" -> "${valor}"`);
+              console.log(`🔍 Cantidad encontrada en línea ${i + 1}: "${line.trim()}" -> "${valor}"`);
               break;
             }
           }
         }
       }
+      
+      console.log(`🔍 Cantidad final para ${campo}: "${valor}"`);
     } else {
       // Patrón genérico
       const regex = new RegExp(`${campo}\\s*[:\\-]?\\s*(.+)`, 'i');
