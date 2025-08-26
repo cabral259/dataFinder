@@ -1077,11 +1077,15 @@
             }
             
             formData.append('fields', JSON.stringify(selectedFields));
+            
+            // Debug: mostrar campos seleccionados
+            console.log('🔍 Campos seleccionados:', selectedFields);
+            console.log('🔍 Tipo de documento:', documentType.value);
 
             // Usar URL completa - API local vs Vercel
             const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
             const apiEndpoint = isLocalhost 
-                ? window.location.origin + '/api/extract-ai'  // Local
+                ? window.location.origin + '/api/extract-handler'  // Local
                 : window.location.origin + '/api/extract-handler'; // Vercel
 
             try {

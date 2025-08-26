@@ -10,6 +10,9 @@ const XLSX = require('xlsx');
 const { Document, Packer, Paragraph, Table, TableRow, TableCell, WidthType, AlignmentType } = require('docx');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
+// Importar el handler de extracción
+const extractHandler = require('./api/extract-handler.js');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -580,6 +583,9 @@ app.post('/api/export', async (req, res) => {
         });
     }
 });
+
+// POST - Handler de extracción con columnas dinámicas
+app.post('/api/extract-handler', extractHandler);
 
 // GET - Obtener estadísticas del servidor
 app.get('/api/stats', (req, res) => {
